@@ -1,0 +1,191 @@
+-- ============================================================================
+--  JURAGAN TERKAYA — Skema Database Supabase
+-- ============================================================================
+--  Cara pakai:
+--  1. Buka project Supabase kamu -> menu "SQL Editor" -> "New query"
+--  2. Copy-paste SELURUH isi file ini, lalu klik "Run"
+--  3. Skrip ini aman dijalankan berulang kali (idempotent)
+--
+--  Bank soal TIDAK di-seed di sini — aplikasi akan mengisinya otomatis dari
+--  src/data/soal.ts saat halaman fasilitator pertama kali dibuka.
+-- ============================================================================
+
+-- ─────────────────────────── TABEL ───────────────────────────
+
+-- Status game global. Hanya ada 1 baris (id = 1).
+create table if not exists game_state (
+  id            int primary key,
+  berjalan      boolean     not null default false,
+  fase          text        not null default 'menunggu',
+  putaran       int         not null default 0,
+  warna_spin    text,
+  soal_id       int,
+  fase_mulai    timestamptz,
+  reveal        boolean     not null default false,
+  show_insight  boolean     not null default false,
+  riwayat_soal  jsonb       not null default '[]'::jsonb,
+  constraint game_state_hanya_satu_baris check (id = 1)
+);
+
+create table if not exists peserta (
+  id          uuid        primary key default gen_random_uuid(),
+  nama        text        not null,
+  saldo       bigint      not null default 10000000,
+  created_at  timestamptz not null default now()
+);
+
+-- Warna yang dipilih peserta pada setiap putaran.
+create table if not exists pilihan_warna (
+  id          bigserial primary key,
+  peserta_id  uuid    not null references peserta(id) on delete cascade,
+  putaran     int     not null,
+  warna       text    not null,
+  otomatis    boolean not null default false,
+  unique (peserta_id, putaran)
+);
+
+-- Jawaban peserta per putaran.
+create table if not exists jawaban (
+  id           bigserial primary key,
+  peserta_id   uuid    not null references peserta(id) on delete cascade,
+  putaran      int     not null,
+  soal_id      int     not null,
+  pilihan      text,                        -- null = tidak menjawab (timeout)
+  benar        boolean not null default false,
+  wajib        boolean not null default false,
+  delta_saldo  bigint  not null default 0,
+  created_at   timestamptz not null default now(),
+  unique (peserta_id, putaran)
+);
+
+-- Catatan transaksi yang diisi peserta.
+create table if not exists transaksi (
+  id          bigserial primary key,
+  peserta_id  uuid   not null references peserta(id) on delete cascade,
+  putaran     int    not null,
+  keterangan  text   not null,
+  jumlah      bigint not null,
+  arah        text   not null,              -- 'masuk' | 'keluar'
+  created_at  timestamptz not null default now()
+);
+
+-- Bank soal (dapat diedit penuh lewat UI fasilitator).
+create table if not exists soal (
+  id        int primary key,
+  warna     text   not null,
+  teks      text   not null,
+  opsi      jsonb  not null,
+  jawaban   text   not null,
+  nominal   bigint not null default 0,
+  efek      text   not null,
+  insight   text   not null default ''
+);
+
+-- Pastikan baris status game selalu ada.
+insert into game_state (id) values (1) on conflict (id) do nothing;
+
+-- Index untuk mempercepat query dashboard saat peserta banyak.
+create index if not exists idx_pilihan_warna_putaran on pilihan_warna (putaran);
+create index if not exists idx_jawaban_putaran       on jawaban (putaran);
+create index if not exists idx_transaksi_putaran     on transaksi (putaran desc);
+
+
+-- ─────────────────────── ROW LEVEL SECURITY ───────────────────────
+-- Game ini tidak memakai sistem login (peserta cukup isi nama), sehingga semua
+-- akses memakai anon key. Kebijakan di bawah sengaja permisif.
+--
+-- ⚠️  KONSEKUENSI: siapa pun yang punya link + anon key secara teknis bisa
+--     menulis data. PIN fasilitator hanya melindungi TAMPILAN, bukan database.
+--     Ini dapat diterima untuk game presentasi internal. Jangan simpan data
+--     sensitif di project Supabase ini.
+
+alter table game_state    enable row level security;
+alter table peserta       enable row level security;
+alter table pilihan_warna enable row level security;
+alter table jawaban       enable row level security;
+alter table transaksi     enable row level security;
+alter table soal          enable row level security;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['game_state','peserta','pilihan_warna','jawaban','transaksi','soal']
+  loop
+    execute format('drop policy if exists akses_publik on %I', t);
+    execute format(
+      'create policy akses_publik on %I for all to anon, authenticated using (true) with check (true)', t
+    );
+  end loop;
+end $$;
+
+
+-- ───────────────────────── REALTIME ─────────────────────────
+-- Daftarkan tabel ke publication realtime agar perubahan terkirim otomatis
+-- ke semua perangkat tanpa perlu polling.
+
+alter table game_state    replica identity full;
+alter table peserta       replica identity full;
+alter table pilihan_warna replica identity full;
+alter table jawaban       replica identity full;
+alter table transaksi     replica identity full;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['game_state','peserta','pilihan_warna','jawaban','transaksi']
+  loop
+    begin
+      execute format('alter publication supabase_realtime add table %I', t);
+    exception
+      when duplicate_object then null;   -- sudah terdaftar, lewati
+    end;
+  end loop;
+end $$;
+
+
+-- ─────────────────── FUNGSI RESET (untuk sesi baru) ───────────────────
+-- Menghapus seluruh data peserta & riwayat, tapi TIDAK menghapus bank soal.
+
+create or replace function reset_game()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from transaksi;
+  delete from jawaban;
+  delete from pilihan_warna;
+  delete from peserta;
+
+  update game_state
+     set berjalan     = false,
+         fase         = 'menunggu',
+         putaran      = 0,
+         warna_spin   = null,
+         soal_id      = null,
+         fase_mulai   = null,
+         reveal       = false,
+         show_insight = false,
+         riwayat_soal = '[]'::jsonb
+   where id = 1;
+end;
+$$;
+
+grant execute on function reset_game() to anon, authenticated;
+
+
+-- ─────────────────── WAKTU SERVER (sinkronisasi timer) ───────────────────
+-- Jam di HP peserta bisa meleset beberapa menit. Semua klien mengukur selisih
+-- jamnya terhadap fungsi ini sekali di awal, agar hitungan mundur 10 dan 30
+-- detik berjalan serempak di semua perangkat.
+
+create or replace function waktu_server()
+returns timestamptz
+language sql
+stable
+as $$ select now() $$;
+
+grant execute on function waktu_server() to anon, authenticated;
