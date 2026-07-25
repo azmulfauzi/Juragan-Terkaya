@@ -338,9 +338,7 @@ function PanelFasilitator() {
                 />
               </>
             ) : (
-              <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-8 text-center text-slate-400">
-                Belum ada soal aktif. Mulai putaran lalu putar roda.
-              </div>
+              <DaftarPesertaBergabung peserta={data.peserta} belumMulai={!state.berjalan} />
             )}
           </section>
         </div>
@@ -410,6 +408,87 @@ function Tombol({
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * Daftar peserta yang sudah bergabung, dipakai fasilitator untuk memastikan
+ * semua orang sudah masuk sebelum putaran pertama dimulai.
+ */
+function DaftarPesertaBergabung({
+  peserta,
+  belumMulai,
+}: {
+  peserta: { id: string; nama: string }[]
+  belumMulai: boolean
+}) {
+  const [tersalin, setTersalin] = useState(false)
+  const linkPeserta = `${window.location.origin}/peserta`
+
+  async function salinLink() {
+    try {
+      await navigator.clipboard.writeText(linkPeserta)
+      setTersalin(true)
+      setTimeout(() => setTersalin(false), 2000)
+    } catch {
+      // Clipboard diblokir browser — fasilitator masih bisa menyalin manual.
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h3 className="font-bold text-slate-100">👥 Peserta bergabung</h3>
+        <span className="rounded-md bg-slate-800 px-2.5 py-0.5 text-sm font-bold text-amber-400">
+          {peserta.length}
+        </span>
+      </div>
+
+      {belumMulai && (
+        <div className="mb-4 rounded-xl border border-slate-700 bg-slate-900/60 p-3">
+          <p className="mb-1.5 text-xs text-slate-400">Bagikan link ini ke peserta:</p>
+          <div className="flex gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-slate-950 px-3 py-2 text-xs text-amber-300">
+              {linkPeserta}
+            </code>
+            <button
+              onClick={salinLink}
+              className="shrink-0 rounded-lg border border-slate-600 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800"
+            >
+              {tersalin ? '✓ Tersalin' : 'Salin'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {peserta.length === 0 ? (
+        <p className="py-6 text-center text-sm text-slate-400">
+          Belum ada peserta yang bergabung.
+          <br />
+          <span className="text-xs text-slate-500">
+            Nama akan muncul di sini otomatis begitu mereka mendaftar.
+          </span>
+        </p>
+      ) : (
+        <ol className="grid gap-1.5 sm:grid-cols-2">
+          {peserta.map((p, i) => (
+            <li
+              key={p.id}
+              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2"
+            >
+              <span className="w-5 shrink-0 text-xs tabular-nums text-slate-500">{i + 1}</span>
+              <span className="truncate text-sm text-slate-100">{p.nama}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <p className="mt-4 border-t border-slate-700 pt-3 text-xs text-slate-500">
+        {belumMulai
+          ? 'Tunggu sampai semua nama muncul, lalu klik “Mulai Game”.'
+          : 'Belum ada soal aktif. Putar roda untuk menampilkan soal.'}
+      </p>
+    </div>
   )
 }
 
