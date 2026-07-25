@@ -16,16 +16,13 @@ export const DURASI_SOAL = 30
 export const RIWAYAT_SOAL_MAX = 20
 
 /**
- * Bonus kecepatan maksimum untuk jawaban BENAR (ala Kahoot).
- *
- * Besarnya sebanding dengan sisa waktu: menjawab benar di detik pertama dapat
- * bonus penuh, menjawab di detik terakhir hampir tidak dapat bonus.
- * Nilainya dibulatkan ke kelipatan Rp10.000 agar rapi dibaca.
- *
- * Set ke 0 untuk mematikan bonus — peringkat kembali murni dari efek soal
- * dan denda, sementara podium tercepat per putaran tetap berjalan.
+ * Kecepatan menjawab TIDAK menambah saldo. Perannya hanya sebagai penentu
+ * urutan saat terjadi seri:
+ *   - Podium putaran : di antara yang sama-sama benar, yang tercepat menang.
+ *   - Peringkat akhir: di antara yang saldonya sama, yang rata-rata menjawabnya
+ *                      lebih cepat berada di atas.
+ * Logikanya ada di src/lib/peringkat.ts.
  */
-export const BONUS_KECEPATAN_MAKS = 250_000
 
 /**
  * Apakah jawaban peserta SUKARELA (warnanya tidak cocok dengan hasil spin)

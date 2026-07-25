@@ -367,6 +367,7 @@ function PanelFasilitator() {
               <PapanSkorPutaran
                 putaran={state.putaran}
                 jawaban={jawabanPutaranIni}
+                semuaJawaban={data.jawaban}
                 peserta={data.peserta}
               />
             ) : soalAktif ? (

@@ -1,12 +1,15 @@
 import { useMemo } from 'react'
 import { MODAL_AWAL } from '../lib/config'
 import { rupiah, selisih } from '../lib/format'
+import { formatRataWaktu, hitungPeringkat } from '../lib/peringkat'
 import type { JawabanPeserta, Peserta } from '../lib/types'
 
 interface Props {
   putaran: number
-  /** Jawaban pada putaran ini saja. */
+  /** Jawaban pada putaran ini saja — dipakai untuk podium tercepat. */
   jawaban: JawabanPeserta[]
+  /** Seluruh jawaban sepanjang game — dipakai sebagai penentu seri peringkat. */
+  semuaJawaban: JawabanPeserta[]
   /** Seluruh peserta beserta saldo terkini. */
   peserta: Peserta[]
   /** Baris peserta ini akan disorot (dipakai di halaman peserta). */
@@ -31,6 +34,7 @@ function detik(ms: number | null): string {
 export default function PapanSkorPutaran({
   putaran,
   jawaban,
+  semuaJawaban,
   peserta,
   sorotPesertaId,
   maksBaris,
@@ -48,7 +52,10 @@ export default function PapanSkorPutaran({
     [jawaban],
   )
 
-  const peringkat = useMemo(() => [...peserta].sort((a, b) => b.saldo - a.saldo), [peserta])
+  const peringkat = useMemo(
+    () => hitungPeringkat(peserta, semuaJawaban),
+    [peserta, semuaJawaban],
+  )
   const ditampilkan = maksBaris ? peringkat.slice(0, maksBaris) : peringkat
   const posisiSaya = sorotPesertaId ? peringkat.findIndex((p) => p.id === sorotPesertaId) : -1
   const sayaDiLuarDaftar = posisiSaya >= 0 && posisiSaya >= ditampilkan.length
@@ -121,6 +128,7 @@ export default function PapanSkorPutaran({
                 posisi={i}
                 nama={p.nama}
                 saldo={p.saldo}
+                rataWaktuMs={p.rataWaktuMs}
                 saya={p.id === sorotPesertaId}
               />
             ))}
@@ -132,6 +140,7 @@ export default function PapanSkorPutaran({
                   posisi={posisiSaya}
                   nama={peringkat[posisiSaya].nama}
                   saldo={peringkat[posisiSaya].saldo}
+                  rataWaktuMs={peringkat[posisiSaya].rataWaktuMs}
                   saya
                 />
               </>
@@ -147,11 +156,13 @@ function BarisPeringkat({
   posisi,
   nama,
   saldo,
+  rataWaktuMs,
   saya,
 }: {
   posisi: number
   nama: string
   saldo: number
+  rataWaktuMs: number | null
   saya?: boolean
 }) {
   return (
@@ -163,9 +174,17 @@ function BarisPeringkat({
       <span className="w-7 shrink-0 text-center text-sm">
         {posisi < 3 ? MEDALI[posisi] : <span className="text-slate-500">{posisi + 1}</span>}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm text-slate-100">
-        {nama}
-        {saya && <span className="ml-1.5 text-xs text-amber-300">(kamu)</span>}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-slate-100">
+          {nama}
+          {saya && <span className="ml-1.5 text-xs text-amber-300">(kamu)</span>}
+        </span>
+        <span
+          className="block text-[10px] text-slate-500"
+          title="Rata-rata waktu menjawab — penentu urutan bila saldo seri"
+        >
+          {formatRataWaktu(rataWaktuMs)}
+        </span>
       </span>
       <span className="shrink-0 text-right">
         <span className="block text-sm font-semibold tabular-nums text-slate-100">

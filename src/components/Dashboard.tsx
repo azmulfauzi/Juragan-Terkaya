@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { MODAL_AWAL, WARNA_META } from '../lib/config'
 import { rupiah, selisih } from '../lib/format'
+import { formatRataWaktu, hitungPeringkat } from '../lib/peringkat'
 import type { JawabanPeserta, Peserta, PilihanWarna, Soal, Transaksi } from '../lib/types'
 
 export interface DataDashboard {
@@ -61,8 +62,8 @@ export default function Dashboard({ data }: { data: DataDashboard }) {
 
 function PapanSkor({ data }: { data: DataDashboard }) {
   const peringkat = useMemo(
-    () => [...data.peserta].sort((a, b) => b.saldo - a.saldo),
-    [data.peserta],
+    () => hitungPeringkat(data.peserta, data.jawaban),
+    [data.peserta, data.jawaban],
   )
 
   const warnaTerakhir = useMemo(() => {
@@ -111,6 +112,7 @@ function PapanSkor({ data }: { data: DataDashboard }) {
               <Th className="w-12">#</Th>
               <Th>Nama</Th>
               <Th className="w-32">Warna terakhir</Th>
+              <Th className="w-28 text-right">Rata waktu</Th>
               <Th className="w-40 text-right">Saldo</Th>
               <Th className="w-32 text-right">Selisih</Th>
             </tr>
@@ -123,6 +125,12 @@ function PapanSkor({ data }: { data: DataDashboard }) {
                   <Td className="text-slate-500">{i + 1}</Td>
                   <Td className="font-medium text-slate-100">{p.nama}</Td>
                   <Td>{w ? `${WARNA_META[w.warna].emoji} ${WARNA_META[w.warna].label}` : '—'}</Td>
+                  <Td
+                    className="text-right tabular-nums text-slate-400"
+                    title="Rata-rata waktu menjawab — penentu urutan bila saldo seri"
+                  >
+                    {formatRataWaktu(p.rataWaktuMs)}
+                  </Td>
                   <Td className="text-right font-semibold tabular-nums text-slate-100">
                     {rupiah(p.saldo)}
                   </Td>

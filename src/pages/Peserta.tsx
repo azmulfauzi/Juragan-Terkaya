@@ -13,7 +13,6 @@ import {
   simpanTransaksi,
 } from '../lib/api'
 import {
-  BONUS_KECEPATAN_MAKS,
   DAFTAR_WARNA,
   DENDA,
   DURASI_PILIH_WARNA,
@@ -51,6 +50,7 @@ export default function Peserta() {
 
   // Dimuat hanya saat fase papan skor — tidak perlu dibawa sepanjang permainan.
   const [semuaPeserta, setSemuaPeserta] = useState<TPeserta[]>([])
+  const [semuaJawaban, setSemuaJawaban] = useState<JawabanPeserta[]>([])
   const [jawabanPutaran, setJawabanPutaran] = useState<JawabanPeserta[]>([])
 
   const putaran = state?.putaran ?? 0
@@ -158,6 +158,7 @@ export default function Peserta() {
       .then(([daftarPeserta, daftarJawaban]) => {
         if (!aktif) return
         setSemuaPeserta(daftarPeserta)
+        setSemuaJawaban(daftarJawaban)
         setJawabanPutaran(daftarJawaban.filter((j) => j.putaran === putaran))
       })
       .catch(() => {
@@ -208,19 +209,12 @@ export default function Peserta() {
           ? Math.max(0, Math.min(durasiMs, sekarang() - new Date(state.fase_mulai).getTime()))
           : durasiMs
 
-        // Bonus kecepatan ala Kahoot: makin cepat menjawab benar, makin besar.
-        const sisaRasio = (durasiMs - waktuMs) / durasiMs
-        const bonus =
-          benar && berpengaruh && BONUS_KECEPATAN_MAKS > 0
-            ? Math.round((BONUS_KECEPATAN_MAKS * sisaRasio) / 10_000) * 10_000
-            : 0
-
+        // Kecepatan tidak menambah saldo — hanya dipakai sebagai penentu urutan
+        // saat terjadi seri (lihat src/lib/peringkat.ts).
         let delta = 0
         if (berpengaruh) {
           if (benar) {
-            const efekSoal =
-              soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
-            delta = efekSoal + bonus
+            delta = soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
           } else {
             delta = -DENDA
           }
@@ -307,6 +301,7 @@ export default function Peserta() {
           <PapanSkorPutaran
             putaran={putaran}
             jawaban={jawabanPutaran}
+            semuaJawaban={semuaJawaban}
             peserta={semuaPeserta}
             sorotPesertaId={peserta.id}
             sembunyikanPodium
@@ -355,6 +350,7 @@ export default function Peserta() {
         <PapanSkorPutaran
           putaran={putaran}
           jawaban={jawabanPutaran}
+          semuaJawaban={semuaJawaban}
           peserta={semuaPeserta}
           sorotPesertaId={peserta.id}
           maksBaris={10}
@@ -739,8 +735,8 @@ function FaseSoal({
               <>
                 <br />
                 <span className="text-xs">
-                  Waktumu {(jawaban.waktu_jawab_ms / 1000).toFixed(1)} detik — makin cepat, makin
-                  besar bonusnya.
+                  Waktumu {(jawaban.waktu_jawab_ms / 1000).toFixed(1)} detik — penentu urutan bila
+                  nanti ada yang seri.
                 </span>
               </>
             )}
