@@ -155,10 +155,12 @@ security definer
 set search_path = public
 as $$
 begin
-  delete from transaksi;
-  delete from jawaban;
-  delete from pilihan_warna;
-  delete from peserta;
+  -- Klausa "where true" wajib ada: Supabase mengaktifkan pg_safeupdate yang
+  -- menolak DELETE tanpa WHERE (error 21000) sebagai pengaman.
+  delete from transaksi     where true;
+  delete from jawaban       where true;
+  delete from pilihan_warna where true;
+  delete from peserta       where true;
 
   update game_state
      set berjalan     = false,
