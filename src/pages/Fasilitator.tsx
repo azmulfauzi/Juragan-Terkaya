@@ -178,13 +178,16 @@ function PanelFasilitator() {
     [data.peserta],
   )
 
-  const pesertaWajib = useMemo(
-    () =>
-      warnaPutaranIni
-        .filter((w) => w.warna === state?.warna_spin)
-        .map((w) => namaPeserta.get(w.peserta_id) ?? '—'),
-    [warnaPutaranIni, state?.warna_spin, namaPeserta],
-  )
+  /** Nama peserta dikelompokkan per warna untuk putaran yang sedang berjalan. */
+  const pesertaPerWarna = useMemo(() => {
+    const peta = {} as Record<Warna, string[]>
+    for (const w of DAFTAR_WARNA) peta[w] = []
+    for (const pilihan of warnaPutaranIni) {
+      peta[pilihan.warna]?.push(namaPeserta.get(pilihan.peserta_id) ?? '—')
+    }
+    for (const w of DAFTAR_WARNA) peta[w].sort((a, b) => a.localeCompare(b, 'id'))
+    return peta
+  }, [warnaPutaranIni, namaPeserta])
 
   const jawabanPutaranIni = useMemo(
     () => data.jawaban.filter((j) => j.putaran === state?.putaran),
@@ -308,17 +311,12 @@ function PanelFasilitator() {
               )}
             </div>
 
-            {state.warna_spin && state.fase !== 'pilih_warna' && (
-              <div className="mt-5 rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-left">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Wajib menjawab</p>
-                <p className={`mt-0.5 font-bold ${WARNA_META[state.warna_spin].teks}`}>
-                  {WARNA_META[state.warna_spin].emoji} {WARNA_META[state.warna_spin].label} ·{' '}
-                  {pesertaWajib.length} peserta
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                  {pesertaWajib.length > 0 ? pesertaWajib.join(', ') : 'Tidak ada peserta di warna ini.'}
-                </p>
-              </div>
+            {state.berjalan && state.putaran > 0 && (
+              <SebaranWarna
+                pesertaPerWarna={pesertaPerWarna}
+                warnaSpin={state.warna_spin}
+                totalPeserta={data.peserta.length}
+              />
             )}
           </section>
 
@@ -412,6 +410,73 @@ function Tombol({
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * Sebaran pilihan warna seluruh peserta pada putaran berjalan.
+ * Warna hasil spin ditandai agar fasilitator langsung tahu siapa yang wajib menjawab.
+ */
+function SebaranWarna({
+  pesertaPerWarna,
+  warnaSpin,
+  totalPeserta,
+}: {
+  pesertaPerWarna: Record<Warna, string[]>
+  warnaSpin: Warna | null
+  totalPeserta: number
+}) {
+  const sudahMemilih = DAFTAR_WARNA.reduce((n, w) => n + pesertaPerWarna[w].length, 0)
+
+  return (
+    <div className="mt-5 text-left">
+      <div className="mb-2 flex items-baseline justify-between px-1">
+        <p className="text-xs uppercase tracking-wide text-slate-500">Pilihan warna peserta</p>
+        <p className="text-xs text-slate-400">
+          {sudahMemilih}/{totalPeserta} sudah memilih
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {DAFTAR_WARNA.map((w) => {
+          const meta = WARNA_META[w]
+          const anggota = pesertaPerWarna[w]
+          const iniHasilSpin = warnaSpin === w
+
+          return (
+            <div
+              key={w}
+              className={`rounded-xl border p-3 transition ${
+                iniHasilSpin
+                  ? 'border-amber-400 bg-amber-500/10 ring-1 ring-amber-400/40'
+                  : warnaSpin
+                    ? 'border-slate-700 bg-slate-900/60 opacity-60'
+                    : 'border-slate-700 bg-slate-900/60'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-sm font-bold ${meta.teks}`}>
+                  {meta.emoji} {meta.label}
+                </span>
+                <span className="shrink-0 rounded-md bg-slate-800 px-1.5 py-0.5 text-xs font-semibold text-slate-300">
+                  {anggota.length}
+                </span>
+              </div>
+
+              {iniHasilSpin && (
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-400">
+                  🎯 Wajib menjawab
+                </p>
+              )}
+
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+                {anggota.length > 0 ? anggota.join(', ') : <span className="text-slate-600">—</span>}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

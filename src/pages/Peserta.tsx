@@ -283,6 +283,7 @@ export default function Peserta() {
           soal={soal}
           wajib={wajib}
           warnaSpin={state.warna_spin}
+          warnaSaya={pilihanWarna?.warna ?? null}
           sisa={sisaSoal}
           jawaban={jawaban}
           mengirim={mengirim}
@@ -521,6 +522,7 @@ function FaseSoal({
   soal,
   wajib,
   warnaSpin,
+  warnaSaya,
   sisa,
   jawaban,
   mengirim,
@@ -530,6 +532,7 @@ function FaseSoal({
   soal: Soal
   wajib: boolean
   warnaSpin: Warna | null
+  warnaSaya: Warna | null
   sisa: number
   jawaban: JawabanPeserta | null
   mengirim: boolean
@@ -542,32 +545,72 @@ function FaseSoal({
 
   return (
     <div className="animasi-muncul space-y-4">
-      {/* Banner status */}
+      {/* Pengumuman hasil putaran roda */}
       <div
-        className={`rounded-2xl border p-4 text-center ${
-          wajib
-            ? 'border-amber-400/50 bg-amber-500/15 text-amber-300'
-            : 'border-slate-600 bg-slate-700/40 text-slate-300'
+        className={`overflow-hidden rounded-2xl border ${
+          wajib ? 'border-amber-400/60' : 'border-slate-600'
         }`}
       >
-        <p className="font-bold">
-          {wajib
-            ? '🎯 Giliran kamu! Wajib jawab'
-            : `Spin di ${warnaSpin ? WARNA_META[warnaSpin].label : '—'} — Boleh ikut jawab!`}
-        </p>
-        {!wajib && (
-          <p className="mt-1 text-xs opacity-80">
-            Tidak wajib, tapi jawaban benar tetap menambah saldomu.
+        <div
+          className={`px-4 py-4 text-center text-white ${
+            warnaSpin ? WARNA_META[warnaSpin].bg : 'bg-slate-700'
+          }`}
+        >
+          <p className="text-[11px] font-medium uppercase tracking-widest opacity-90">
+            🎰 Roda berhenti di
           </p>
-        )}
+          <p className="mt-0.5 text-2xl font-extrabold drop-shadow">
+            {warnaSpin ? `${WARNA_META[warnaSpin].emoji} ${WARNA_META[warnaSpin].label}` : '—'}
+          </p>
+        </div>
+
+        <div
+          className={`px-4 py-3 text-center ${
+            wajib ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800/80 text-slate-300'
+          }`}
+        >
+          {wajib ? (
+            <>
+              <p className="font-bold">🎯 Warnamu cocok — kamu WAJIB menjawab!</p>
+              <p className="mt-0.5 text-xs opacity-80">
+                Tidak menjawab sampai waktu habis kena denda {rupiah(DENDA)}.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm">
+                Warnamu{' '}
+                {warnaSaya ? (
+                  <b className={WARNA_META[warnaSaya].teks}>
+                    {WARNA_META[warnaSaya].emoji} {WARNA_META[warnaSaya].label}
+                  </b>
+                ) : (
+                  '—'
+                )}{' '}
+                — boleh ikut jawab
+              </p>
+              <p className="mt-0.5 text-xs opacity-70">
+                Tidak wajib. Diam saja aman, tapi jawaban benar menambah saldomu.
+              </p>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Kartu soal */}
       <div className="rounded-2xl border border-slate-700 bg-slate-800/60 p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
-          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${efek.kelas}`}>
-            {efek.emoji} {efek.label}
-          </span>
+          {/* Jenis efek baru boleh terlihat setelah jawaban dibuka — sebelum itu
+              badge ini membocorkan arah jawaban yang benar. */}
+          {selesai ? (
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${efek.kelas}`}>
+              {efek.emoji} {efek.label}
+            </span>
+          ) : (
+            <span className="rounded-full border border-slate-600 bg-slate-700/40 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+              ❓ Kasus keuangan
+            </span>
+          )}
           {!selesai && !habis && <TimerRing sisa={sisa} total={DURASI_SOAL} ukuran={64} />}
         </div>
 
