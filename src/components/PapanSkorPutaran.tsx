@@ -56,9 +56,13 @@ export default function PapanSkorPutaran({
     () => hitungPeringkat(peserta, semuaJawaban),
     [peserta, semuaJawaban],
   )
-  const ditampilkan = maksBaris ? peringkat.slice(0, maksBaris) : peringkat
+  // Tiga besar ditonjolkan sebagai podium, sisanya jadi daftar biasa.
+  const tigaBesar = peringkat.slice(0, 3)
+  const sisanya = peringkat.slice(3)
+  const ditampilkan = maksBaris ? sisanya.slice(0, Math.max(0, maksBaris - 3)) : sisanya
+
   const posisiSaya = sorotPesertaId ? peringkat.findIndex((p) => p.id === sorotPesertaId) : -1
-  const sayaDiLuarDaftar = posisiSaya >= 0 && posisiSaya >= ditampilkan.length
+  const sayaDiLuarDaftar = posisiSaya >= 0 && posisiSaya >= 3 + ditampilkan.length
 
   return (
     <div className="animasi-muncul space-y-4">
@@ -114,40 +118,109 @@ export default function PapanSkorPutaran({
         )}
       </div>
 
-      {/* Peringkat kumulatif */}
+      {/* Peringkat kumulatif — tiga besar ditonjolkan */}
       <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
-        <h3 className="mb-3 font-bold text-slate-100">🏆 Peringkat keseluruhan</h3>
+        <h3 className="mb-4 font-bold text-slate-100">🏆 Top 3 Juragan</h3>
 
         {peringkat.length === 0 ? (
           <p className="text-center text-sm text-slate-400">Belum ada peserta.</p>
         ) : (
-          <ol className="space-y-1.5">
-            {ditampilkan.map((p, i) => (
-              <BarisPeringkat
-                key={p.id}
-                posisi={i}
-                nama={p.nama}
-                saldo={p.saldo}
-                rataWaktuMs={p.rataWaktuMs}
-                saya={p.id === sorotPesertaId}
-              />
-            ))}
-
-            {sayaDiLuarDaftar && (
-              <>
-                <li className="py-1 text-center text-xs text-slate-600">⋯</li>
-                <BarisPeringkat
-                  posisi={posisiSaya}
-                  nama={peringkat[posisiSaya].nama}
-                  saldo={peringkat[posisiSaya].saldo}
-                  rataWaktuMs={peringkat[posisiSaya].rataWaktuMs}
-                  saya
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              {tigaBesar.map((p, i) => (
+                <KartuPodium
+                  key={p.id}
+                  posisi={i}
+                  nama={p.nama}
+                  saldo={p.saldo}
+                  rataWaktuMs={p.rataWaktuMs}
+                  saya={p.id === sorotPesertaId}
                 />
+              ))}
+            </div>
+
+            {(ditampilkan.length > 0 || sayaDiLuarDaftar) && (
+              <>
+                <p className="mb-2 mt-5 text-xs uppercase tracking-wide text-slate-500">
+                  Peringkat selanjutnya
+                </p>
+                <ol className="space-y-1.5">
+                  {ditampilkan.map((p, i) => (
+                    <BarisPeringkat
+                      key={p.id}
+                      posisi={i + 3}
+                      nama={p.nama}
+                      saldo={p.saldo}
+                      rataWaktuMs={p.rataWaktuMs}
+                      saya={p.id === sorotPesertaId}
+                    />
+                  ))}
+
+                  {sayaDiLuarDaftar && (
+                    <>
+                      <li className="py-1 text-center text-xs text-slate-600">⋯</li>
+                      <BarisPeringkat
+                        posisi={posisiSaya}
+                        nama={peringkat[posisiSaya].nama}
+                        saldo={peringkat[posisiSaya].saldo}
+                        rataWaktuMs={peringkat[posisiSaya].rataWaktuMs}
+                        saya
+                      />
+                    </>
+                  )}
+                </ol>
               </>
             )}
-          </ol>
+          </>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Kartu podium untuk tiga peringkat teratas. */
+function KartuPodium({
+  posisi,
+  nama,
+  saldo,
+  rataWaktuMs,
+  saya,
+}: {
+  posisi: number
+  nama: string
+  saldo: number
+  rataWaktuMs: number | null
+  saya?: boolean
+}) {
+  const juara = posisi === 0
+  return (
+    <div
+      className={`flex flex-col items-center rounded-xl border p-3 text-center ${
+        juara
+          ? 'border-amber-400 bg-gradient-to-b from-amber-500/25 to-transparent'
+          : 'border-slate-700 bg-slate-900/60'
+      } ${saya ? 'ring-2 ring-amber-400/70' : ''}`}
+    >
+      <span className={juara ? 'text-3xl' : 'text-2xl'}>{MEDALI[posisi]}</span>
+      <span className="mt-1 w-full truncate text-sm font-bold text-slate-100" title={nama}>
+        {nama}
+      </span>
+      {saya && <span className="text-[10px] text-amber-300">(kamu)</span>}
+      <span
+        className={`mt-1 w-full truncate font-bold tabular-nums ${
+          juara ? 'text-base text-amber-400' : 'text-sm text-slate-200'
+        }`}
+      >
+        {rupiah(saldo)}
+      </span>
+      <span
+        className={`text-[10px] tabular-nums ${
+          saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
+        }`}
+      >
+        {selisih(saldo - MODAL_AWAL)}
+      </span>
+      <span className="text-[10px] text-slate-500">{formatRataWaktu(rataWaktuMs)}</span>
     </div>
   )
 }

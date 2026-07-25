@@ -21,7 +21,15 @@ const SUB_TAB = [
 
 type SubTab = (typeof SUB_TAB)[number]['id']
 
-export default function Dashboard({ data }: { data: DataDashboard }) {
+interface PropsDashboard {
+  data: DataDashboard
+  /** Putaran yang sedang berjalan — detailnya disembunyikan sampai reveal. */
+  putaranAktif: number
+  /** true jika jawaban putaran aktif sudah dibuka fasilitator. */
+  revealAktif: boolean
+}
+
+export default function Dashboard({ data, putaranAktif, revealAktif }: PropsDashboard) {
   const [tab, setTab] = useState<SubTab>('skor')
 
   return (
@@ -51,7 +59,9 @@ export default function Dashboard({ data }: { data: DataDashboard }) {
           {tab === 'skor' && <PapanSkor data={data} />}
           {tab === 'warna' && <WarnaPerPutaran data={data} />}
           {tab === 'catatan' && <CatatanTransaksi data={data} />}
-          {tab === 'rekap' && <RekapJawaban data={data} />}
+          {tab === 'rekap' && (
+            <RekapJawaban data={data} putaranAktif={putaranAktif} revealAktif={revealAktif} />
+          )}
         </>
       )}
     </div>
@@ -255,7 +265,15 @@ function CatatanTransaksi({ data }: { data: DataDashboard }) {
 
 // ────────────────────────── 4. REKAP JAWABAN ──────────────────────────
 
-function RekapJawaban({ data }: { data: DataDashboard }) {
+function RekapJawaban({
+  data,
+  putaranAktif,
+  revealAktif,
+}: {
+  data: DataDashboard
+  putaranAktif: number
+  revealAktif: boolean
+}) {
   const nama = useMemo(() => new Map(data.peserta.map((p) => [p.id, p.nama])), [data.peserta])
   const soalPeta = useMemo(() => new Map(data.soal.map((s) => [s.id, s])), [data.soal])
 
@@ -281,22 +299,36 @@ function RekapJawaban({ data }: { data: DataDashboard }) {
         const benar = daftar.filter((j) => j.benar).length
         const persen = daftar.length > 0 ? Math.round((benar / daftar.length) * 100) : 0
         const soal = soalPeta.get(daftar[0].soal_id)
+        // Putaran yang belum dibuka tidak boleh menampilkan benar/salah —
+        // layar fasilitator sering di-share ke peserta.
+        const tersembunyi = putaran === putaranAktif && !revealAktif
 
         return (
           <div key={putaran} className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h4 className="font-bold text-slate-100">Putaran {putaran}</h4>
               <span className="text-xs text-slate-400">
-                {benar}/{daftar.length} benar ({persen}%)
+                {tersembunyi ? `${daftar.length} jawaban masuk` : `${benar}/${daftar.length} benar (${persen}%)`}
               </span>
             </div>
 
-            {soal && <p className="mb-3 text-xs text-slate-400">{soal.teks}</p>}
+            {soal && !tersembunyi && <p className="mb-3 text-xs text-slate-400">{soal.teks}</p>}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <KelompokJawaban judul="Wajib" daftar={wajib} nama={nama} aksen="text-amber-400" />
-              <KelompokJawaban judul="Sukarela" daftar={sukarela} nama={nama} aksen="text-slate-400" />
-            </div>
+            {tersembunyi ? (
+              <p className="rounded-lg border border-slate-700 bg-slate-900/60 p-4 text-center text-xs text-slate-400">
+                🔒 Putaran ini masih berjalan. Detail muncul setelah kamu menekan “Reveal Jawaban”.
+              </p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <KelompokJawaban judul="Wajib" daftar={wajib} nama={nama} aksen="text-amber-400" />
+                <KelompokJawaban
+                  judul="Sukarela"
+                  daftar={sukarela}
+                  nama={nama}
+                  aksen="text-slate-400"
+                />
+              </div>
+            )}
           </div>
         )
       })}

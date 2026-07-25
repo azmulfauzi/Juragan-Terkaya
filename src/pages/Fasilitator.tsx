@@ -333,7 +333,7 @@ function PanelFasilitator() {
       </div>
 
       {tab === 'dashboard' ? (
-        <Dashboard data={data} />
+        <Dashboard data={data} putaranAktif={state.putaran} revealAktif={state.reveal} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Kolom kiri: roda & kontrol */}
@@ -738,10 +738,19 @@ function KartuSoal({
   return (
     <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
-        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${efek.kelas}`}>
-          {efek.emoji} {efek.label}
-          {soal.efek !== 'netral' && ` · ${rupiah(soal.nominal)}`}
-        </span>
+        {/* Layar fasilitator biasanya di-share ke peserta, jadi jenis efek dan
+            nominalnya ikut disembunyikan sampai reveal — keduanya menunjukkan
+            arah jawaban yang benar. */}
+        {reveal ? (
+          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${efek.kelas}`}>
+            {efek.emoji} {efek.label}
+            {soal.efek !== 'netral' && ` · ${rupiah(soal.nominal)}`}
+          </span>
+        ) : (
+          <span className="rounded-full border border-slate-600 bg-slate-700/40 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+            ❓ Kasus keuangan
+          </span>
+        )}
         {fase === 'soal' && <TimerRing sisa={sisa} total={DURASI_SOAL} ukuran={60} />}
       </div>
 
