@@ -3,12 +3,12 @@ import {
   ambilSemuaJawaban,
   ambilSemuaPeserta,
   ambilSemuaSoal,
+  ambilSemuaTema,
   ambilSemuaTransaksi,
-  hapusSoal,
+  ambilSoalTema,
   pilihSoalAcak,
   resetGame,
-  seedSoalJikaKosong,
-  simpanSemuaSoal,
+  seedTemaJikaKosong,
   tambahRiwayat,
   terapkanSaldoPutaran,
   ubahGameState,
@@ -17,10 +17,10 @@ import { DURASI_SOAL, EFEK_META } from '../lib/config'
 import { useGameState, useRealtimeTabel, useSisaWaktu } from '../lib/hooks'
 import { sekarang } from '../lib/waktu'
 import { LABEL_OPSI, rupiah } from '../lib/format'
-import type { JawabanPeserta, Soal } from '../lib/types'
+import type { JawabanPeserta, Soal, Tema } from '../lib/types'
 import PinGate from '../components/PinGate'
 import TimerRing from '../components/TimerRing'
-import EditorSoal from '../components/EditorSoal'
+import BankSoal from '../components/BankSoal'
 import PapanSkorPutaran from '../components/PapanSkorPutaran'
 import BannerVersi from '../components/BannerVersi'
 import { useVersiKedaluwarsa } from '../lib/versi'
@@ -48,15 +48,15 @@ function PanelFasilitator() {
   const { state } = useGameState()
   const versiKedaluwarsa = useVersiKedaluwarsa()
 
-  const [soal, setSoal] = useState<Soal[]>([])
+  const [tema, setTema] = useState<Tema[]>([])
+  const [soalTema, setSoalTema] = useState<Soal[]>([])
   const [data, setData] = useState<DataDashboard>({
     peserta: [],
     jawaban: [],
     transaksi: [],
     soal: [],
   })
-  const [tab, setTab] = useState<'spin' | 'dashboard'>('spin')
-  const [editorTerbuka, setEditorTerbuka] = useState(false)
+  const [tab, setTab] = useState<'kendali' | 'bank' | 'dashboard'>('kendali')
   const [galat, setGalat] = useState<string | null>(null)
   const [sibuk, setSibuk] = useState(false)
 
@@ -66,12 +66,36 @@ function PanelFasilitator() {
 
   const sisaSoal = useSisaWaktu(state?.fase === 'soal' ? state.fase_mulai : null, DURASI_SOAL)
 
-  // ── Muat bank soal (sekaligus isi data awal bila tabel masih kosong) ──
-  useEffect(() => {
-    seedSoalJikaKosong()
-      .then(setSoal)
-      .catch((e) => setGalat(e instanceof Error ? e.message : String(e)))
+  // ── Muat daftar tema (isi bawaan bila database masih benar-benar kosong) ──
+  const muatTema = useCallback(async () => {
+    try {
+      setTema(await seedTemaJikaKosong())
+    } catch (e) {
+      setGalat(e instanceof Error ? e.message : String(e))
+    }
   }, [])
+
+  useEffect(() => {
+    muatTema()
+  }, [muatTema])
+
+  // ── Muat soal dari tema yang sedang dipilih ──────────────────────────
+  const temaId = state?.tema_id ?? null
+  useEffect(() => {
+    if (!temaId) {
+      setSoalTema([])
+      return
+    }
+    let aktif = true
+    ambilSoalTema(temaId)
+      .then((s) => aktif && setSoalTema(s))
+      .catch((e) => setGalat(e instanceof Error ? e.message : String(e)))
+    return () => {
+      aktif = false
+    }
+  }, [temaId])
+
+  const temaAktif = useMemo(() => tema.find((t) => t.id === temaId) ?? null, [tema, temaId])
 
   // ── Muat data dashboard, disegarkan otomatis lewat realtime ──
   const muatData = useCallback(async () => {
@@ -125,17 +149,29 @@ function PanelFasilitator() {
     }
   }, [])
 
+  /** Mengganti tema yang dimainkan. Riwayat soal ikut dikosongkan. */
+  const pilihTema = (id: number | null) =>
+    jalankan(() => ubahGameState({ tema_id: id, riwayat_soal: [] }))
+
   /**
-   * Membuka putaran baru: langsung mengundi soal acak dan menampilkannya ke
-   * seluruh peserta. Tidak ada lagi fase pilih warna maupun putar roda —
-   * semua peserta menjawab setiap soal.
+   * Membuka putaran baru: mengundi soal acak dari tema yang dipilih lalu
+   * menampilkannya ke seluruh peserta. Semua peserta menjawab setiap soal.
    */
   const mulaiPutaran = useCallback(
     (putaranBaru: number) =>
       jalankan(async () => {
-        const terpilih = pilihSoalAcak(soal, state?.riwayat_soal ?? [])
+        if (!temaId) throw new Error('Pilih tema soal terlebih dahulu.')
+
+        // Diambil ulang dari database supaya soal yang baru saja ditambahkan
+        // lewat menu Bank Soal langsung ikut terundi.
+        const daftarSoal = await ambilSoalTema(temaId)
+        setSoalTema(daftarSoal)
+
+        const terpilih = pilihSoalAcak(daftarSoal, state?.riwayat_soal ?? [])
         if (!terpilih) {
-          throw new Error('Bank soal masih kosong. Tambahkan soal lewat Editor Soal terlebih dahulu.')
+          throw new Error(
+            'Tema ini belum punya soal. Tambahkan soal lewat menu Bank Soal terlebih dahulu.',
+          )
         }
         await ubahGameState({
           berjalan: true,
@@ -148,7 +184,7 @@ function PanelFasilitator() {
           riwayat_soal: tambahRiwayat(state?.riwayat_soal ?? [], terpilih.id),
         })
       }),
-    [soal, state?.riwayat_soal, jalankan],
+    [temaId, state?.riwayat_soal, jalankan],
   )
 
   /**
@@ -184,8 +220,8 @@ function PanelFasilitator() {
 
   // ── Data turunan untuk panel kontrol ─────────────────────────────────
   const soalAktif = useMemo(
-    () => soal.find((s) => s.id === state?.soal_id) ?? null,
-    [soal, state?.soal_id],
+    () => soalTema.find((s) => s.id === state?.soal_id) ?? null,
+    [soalTema, state?.soal_id],
   )
 
   const namaPeserta = useMemo(
@@ -222,16 +258,11 @@ function PanelFasilitator() {
             >
               {data.peserta.length} peserta bergabung {daftarTerbuka ? '▴' : '▾'}
             </button>
+            {temaAktif && <span>· {temaAktif.nama}</span>}
             {state.berjalan && <span>· Putaran {state.putaran}</span>}
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setEditorTerbuka(true)}
-            className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
-          >
-            ✏️ Edit Soal
-          </button>
           <button
             onClick={resetTotal}
             className="rounded-lg border border-red-500/40 px-3 py-2 text-sm text-red-400 transition hover:bg-red-500/10"
@@ -280,26 +311,45 @@ function PanelFasilitator() {
       )}
 
       {/* Tab utama */}
-      <div className="mb-5 flex gap-2">
-        <TabUtama aktif={tab === 'spin'} onClick={() => setTab('spin')}>
-          🎰 Spin &amp; Soal
+      <div className="mb-5 flex flex-wrap gap-2">
+        <TabUtama aktif={tab === 'kendali'} onClick={() => setTab('kendali')}>
+          🎮 Kendali
+        </TabUtama>
+        <TabUtama aktif={tab === 'bank'} onClick={() => setTab('bank')}>
+          📚 Bank Soal
         </TabUtama>
         <TabUtama aktif={tab === 'dashboard'} onClick={() => setTab('dashboard')}>
           📊 Dashboard
         </TabUtama>
       </div>
 
-      {tab === 'dashboard' ? (
+      {tab === 'bank' ? (
+        <BankSoal
+          onBerubah={() => {
+            muatTema()
+            if (temaId) ambilSoalTema(temaId).then(setSoalTema).catch(() => {})
+          }}
+        />
+      ) : tab === 'dashboard' ? (
         <Dashboard data={data} putaranAktif={state.putaran} revealAktif={state.reveal} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Kolom kiri: kontrol putaran */}
           <section className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5 text-center">
+            <PemilihTema
+              tema={tema}
+              temaId={temaId}
+              jumlahSoal={soalTema.length}
+              terkunci={state.berjalan}
+              onPilih={pilihTema}
+              onKeBankSoal={() => setTab('bank')}
+            />
+
             <StatusFase state={state} sisaSoal={sisaSoal} />
 
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               {!state.berjalan && state.fase !== 'selesai' && (
-                <Tombol utama onClick={() => mulaiPutaran(1)} sibuk={sibuk}>
+                <Tombol utama onClick={() => mulaiPutaran(1)} sibuk={sibuk || !temaId}>
                   ▶️ Mulai Game
                 </Tombol>
               )}
@@ -412,23 +462,74 @@ function PanelFasilitator() {
         </div>
       )}
 
-      {editorTerbuka && (
-        <EditorSoal
-          soalAwal={soal}
-          onTutup={() => setEditorTerbuka(false)}
-          onSimpanSemua={async (daftar, idDihapus) => {
-            for (const id of idDihapus) await hapusSoal(id)
-            await simpanSemuaSoal(daftar)
-            setSoal(await ambilSemuaSoal())
-            await muatData()
-          }}
-        />
-      )}
     </div>
   )
 }
 
 // ═════════════════════════ Komponen pendukung ═════════════════════════
+
+/**
+ * Pemilih tema yang akan dimainkan. Terkunci selama game berjalan supaya soal
+ * tidak berpindah tema di tengah sesi — peringkat peserta jadi tidak sebanding
+ * kalau materinya berganti di tengah jalan.
+ */
+function PemilihTema({
+  tema,
+  temaId,
+  jumlahSoal,
+  terkunci,
+  onPilih,
+  onKeBankSoal,
+}: {
+  tema: Tema[]
+  temaId: number | null
+  jumlahSoal: number
+  terkunci: boolean
+  onPilih: (id: number | null) => void
+  onKeBankSoal: () => void
+}) {
+  if (tema.length === 0) {
+    return (
+      <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-300">
+        Belum ada tema soal.{' '}
+        <button onClick={onKeBankSoal} className="underline underline-offset-2">
+          Buat tema di menu Bank Soal
+        </button>{' '}
+        terlebih dahulu.
+      </div>
+    )
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-left">
+      <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500">
+        Tema soal sesi ini
+      </label>
+
+      <select
+        value={temaId ?? ''}
+        disabled={terkunci}
+        onChange={(e) => onPilih(e.target.value ? Number(e.target.value) : null)}
+        className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-400 disabled:opacity-50"
+      >
+        <option value="">— pilih tema —</option>
+        {tema.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.nama}
+          </option>
+        ))}
+      </select>
+
+      <p className="mt-1.5 text-[11px] text-slate-500">
+        {terkunci
+          ? 'Tema terkunci selama game berjalan. Akhiri atau reset game untuk menggantinya.'
+          : temaId
+            ? `${jumlahSoal} soal siap diundi dari tema ini.`
+            : 'Pilih tema dulu sebelum memulai game.'}
+      </p>
+    </div>
+  )
+}
 
 function TabUtama({
   aktif,

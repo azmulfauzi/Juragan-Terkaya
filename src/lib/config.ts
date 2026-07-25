@@ -1,5 +1,3 @@
-import type { Warna } from './types'
-
 /** Modal awal setiap peserta. */
 export const MODAL_AWAL = 10_000_000
 
@@ -45,68 +43,6 @@ export const RIWAYAT_SOAL_MAX = 20
 
 /** PIN akses halaman fasilitator. Ubah lewat file .env (VITE_FASILITATOR_PIN). */
 export const FASILITATOR_PIN = import.meta.env.VITE_FASILITATOR_PIN || '2024'
-
-/**
- * Warna kini hanya berfungsi sebagai label pengelompokan di bank soal, supaya
- * fasilitator mudah menata dan menyaring soal di editor. Peserta tidak lagi
- * memilih warna, dan warna tidak mempengaruhi jalannya permainan.
- */
-export const DAFTAR_WARNA: Warna[] = ['merah', 'kuning', 'hijau', 'biru']
-
-interface WarnaMeta {
-  label: string
-  emoji: string
-  hex: string
-  /** Kelas Tailwind ditulis lengkap agar tidak hilang saat build. */
-  bg: string
-  bgHover: string
-  border: string
-  teks: string
-  bgLembut: string
-}
-
-export const WARNA_META: Record<Warna, WarnaMeta> = {
-  merah: {
-    label: 'Merah',
-    emoji: '🔴',
-    hex: '#dc2626',
-    bg: 'bg-red-600',
-    bgHover: 'hover:bg-red-500',
-    border: 'border-red-500',
-    teks: 'text-red-400',
-    bgLembut: 'bg-red-500/15',
-  },
-  kuning: {
-    label: 'Kuning',
-    emoji: '🟡',
-    hex: '#eab308',
-    bg: 'bg-yellow-500',
-    bgHover: 'hover:bg-yellow-400',
-    border: 'border-yellow-400',
-    teks: 'text-yellow-400',
-    bgLembut: 'bg-yellow-500/15',
-  },
-  hijau: {
-    label: 'Hijau',
-    emoji: '🟢',
-    hex: '#16a34a',
-    bg: 'bg-green-600',
-    bgHover: 'hover:bg-green-500',
-    border: 'border-green-500',
-    teks: 'text-green-400',
-    bgLembut: 'bg-green-500/15',
-  },
-  biru: {
-    label: 'Biru',
-    emoji: '🔵',
-    hex: '#2563eb',
-    bg: 'bg-blue-600',
-    bgHover: 'hover:bg-blue-500',
-    border: 'border-blue-500',
-    teks: 'text-blue-400',
-    bgLembut: 'bg-blue-500/15',
-  },
-}
 
 export const EFEK_META = {
   masuk: { label: 'Pemasukan', emoji: '➕', kelas: 'bg-green-500/15 text-green-400 border-green-500/40' },

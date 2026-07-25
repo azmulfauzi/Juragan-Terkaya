@@ -1,15 +1,7 @@
 import { supabase } from './supabase'
 import { SOAL_DEFAULT } from '../data/soal'
 import { RIWAYAT_SOAL_MAX } from './config'
-import type {
-  GameState,
-  JawabanPeserta,
-  Peserta,
-  PilihanWarna,
-  Soal,
-  Transaksi,
-  Warna,
-} from './types'
+import type { GameState, JawabanPeserta, Peserta, Soal, Tema, Transaksi } from './types'
 
 /** Membungkus error Supabase jadi pesan yang bisa dibaca manusia. */
 function cek<T>(data: T | null, error: { message: string } | null, konteks: string): T {
@@ -73,42 +65,6 @@ export async function ambilSemuaPeserta(): Promise<Peserta[]> {
 export async function ubahSaldo(pesertaId: string, saldoBaru: number): Promise<void> {
   const { error } = await supabase.from('peserta').update({ saldo: saldoBaru }).eq('id', pesertaId)
   if (error) throw new Error(`Gagal memperbarui saldo: ${error.message}`)
-}
-
-// ──────────────────────────── PILIHAN WARNA ────────────────────────────
-
-export async function simpanPilihanWarna(
-  pesertaId: string,
-  putaran: number,
-  warna: Warna,
-  otomatis = false,
-): Promise<void> {
-  const { error } = await supabase
-    .from('pilihan_warna')
-    .upsert(
-      { peserta_id: pesertaId, putaran, warna, otomatis },
-      { onConflict: 'peserta_id,putaran', ignoreDuplicates: true },
-    )
-  if (error) throw new Error(`Gagal menyimpan pilihan warna: ${error.message}`)
-}
-
-export async function ambilSemuaPilihanWarna(): Promise<PilihanWarna[]> {
-  const { data, error } = await supabase.from('pilihan_warna').select('*')
-  return cek(data, error, 'Gagal membaca pilihan warna')
-}
-
-export async function ambilPilihanWarnaSaya(
-  pesertaId: string,
-  putaran: number,
-): Promise<PilihanWarna | null> {
-  const { data, error } = await supabase
-    .from('pilihan_warna')
-    .select('*')
-    .eq('peserta_id', pesertaId)
-    .eq('putaran', putaran)
-    .maybeSingle()
-  if (error) throw new Error(`Gagal membaca pilihan warna: ${error.message}`)
-  return data
 }
 
 // ─────────────────────────────── JAWABAN ───────────────────────────────
@@ -179,11 +135,47 @@ export async function ambilTransaksiSaya(pesertaId: string): Promise<Transaksi[]
   return cek(data, error, 'Gagal membaca catatan transaksi')
 }
 
+// ──────────────────────────────── TEMA ────────────────────────────────
+
+export async function ambilSemuaTema(): Promise<Tema[]> {
+  const { data, error } = await supabase.from('tema').select('*').order('nama', { ascending: true })
+  return cek(data, error, 'Gagal membaca daftar tema')
+}
+
+export async function buatTema(nama: string, deskripsi = ''): Promise<Tema> {
+  const { data, error } = await supabase
+    .from('tema')
+    .insert({ nama: nama.trim(), deskripsi: deskripsi.trim() })
+    .select()
+    .single()
+  return cek(data, error, 'Gagal membuat tema')
+}
+
+export async function ubahTema(id: number, patch: Partial<Pick<Tema, 'nama' | 'deskripsi'>>) {
+  const { error } = await supabase.from('tema').update(patch).eq('id', id)
+  if (error) throw new Error(`Gagal memperbarui tema: ${error.message}`)
+}
+
+/** Menghapus tema beserta seluruh soal di dalamnya (cascade dari database). */
+export async function hapusTema(id: number): Promise<void> {
+  const { error } = await supabase.from('tema').delete().eq('id', id)
+  if (error) throw new Error(`Gagal menghapus tema: ${error.message}`)
+}
+
 // ──────────────────────────────── SOAL ────────────────────────────────
 
 export async function ambilSemuaSoal(): Promise<Soal[]> {
   const { data, error } = await supabase.from('soal').select('*').order('id', { ascending: true })
   return cek(data, error, 'Gagal membaca bank soal')
+}
+
+export async function ambilSoalTema(temaId: number): Promise<Soal[]> {
+  const { data, error } = await supabase
+    .from('soal')
+    .select('*')
+    .eq('tema_id', temaId)
+    .order('id', { ascending: true })
+  return cek(data, error, 'Gagal membaca soal tema')
 }
 
 export async function ambilSoalById(id: number): Promise<Soal | null> {
@@ -192,22 +184,35 @@ export async function ambilSoalById(id: number): Promise<Soal | null> {
   return data
 }
 
-/** Mengisi tabel soal dengan data default jika tabel masih kosong. */
-export async function seedSoalJikaKosong(): Promise<Soal[]> {
-  const { count, error } = await supabase.from('soal').select('id', { count: 'exact', head: true })
-  if (error) throw new Error(`Gagal memeriksa bank soal: ${error.message}`)
+/**
+ * Mengisi bank soal dengan tema bawaan bila database masih benar-benar kosong.
+ * Dipakai pada pemasangan baru; database yang sudah berisi soal tidak disentuh.
+ */
+export async function seedTemaJikaKosong(): Promise<Tema[]> {
+  const tema = await ambilSemuaTema()
+  if (tema.length > 0) return tema
 
-  if ((count ?? 0) === 0) {
-    const { error: errInsert } = await supabase.from('soal').insert(SOAL_DEFAULT)
-    if (errInsert) throw new Error(`Gagal mengisi bank soal awal: ${errInsert.message}`)
-  }
-  return ambilSemuaSoal()
+  const temaBaru = await buatTema(
+    'Literasi Keuangan UMKM',
+    'Bank soal bawaan: penjualan tunai, piutang, hutang, prive, dan kebiasaan mencatat harian.',
+  )
+  const { error } = await supabase
+    .from('soal')
+    .insert(SOAL_DEFAULT.map((s) => ({ ...s, tema_id: temaBaru.id })))
+  if (error) throw new Error(`Gagal mengisi bank soal awal: ${error.message}`)
+
+  return ambilSemuaTema()
 }
 
-/** Menyimpan seluruh bank soal hasil editan fasilitator. */
-export async function simpanSemuaSoal(daftarSoal: Soal[]): Promise<void> {
-  const { error } = await supabase.from('soal').upsert(daftarSoal, { onConflict: 'id' })
-  if (error) throw new Error(`Gagal menyimpan bank soal: ${error.message}`)
+/** Nomor soal ditentukan database (sequence), jadi tidak dikirim dari sini. */
+export async function buatSoal(soal: Omit<Soal, 'id'>): Promise<Soal> {
+  const { data, error } = await supabase.from('soal').insert(soal).select().single()
+  return cek(data, error, 'Gagal menambah soal')
+}
+
+export async function ubahSoal(id: number, patch: Partial<Omit<Soal, 'id'>>): Promise<void> {
+  const { error } = await supabase.from('soal').update(patch).eq('id', id)
+  if (error) throw new Error(`Gagal menyimpan soal: ${error.message}`)
 }
 
 export async function hapusSoal(id: number): Promise<void> {

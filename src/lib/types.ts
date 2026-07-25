@@ -1,9 +1,19 @@
 // Tipe data inti game "Juragan Terkaya".
 // Nama field sengaja memakai Bahasa Indonesia agar selaras dengan PRD & skema database.
 
-export type Warna = 'merah' | 'kuning' | 'hijau' | 'biru'
 export type Efek = 'masuk' | 'keluar' | 'netral'
 export type Pilihan = 'A' | 'B' | 'C'
+
+/**
+ * Wadah pengelompokan soal yang dibuat fasilitator, misal "Literasi Keuangan
+ * UMKM" atau "Pencatatan Kas Harian". Satu sesi permainan memakai satu tema.
+ */
+export interface Tema {
+  id: number
+  nama: string
+  deskripsi: string
+  created_at: string
+}
 
 /**
  * Fase permainan (disimpan di baris tunggal `game_state`).
@@ -17,7 +27,7 @@ export type Fase = 'menunggu' | 'soal' | 'reveal' | 'skor' | 'selesai'
 
 export interface Soal {
   id: number
-  warna: Warna
+  tema_id: number
   teks: string
   opsi: string[]
   jawaban: Pilihan
@@ -31,7 +41,8 @@ export interface GameState {
   berjalan: boolean
   fase: Fase
   putaran: number
-  warna_spin: Warna | null
+  /** Tema yang sedang dimainkan — soal diundi hanya dari tema ini. */
+  tema_id: number | null
   soal_id: number | null
   /** ISO timestamp saat fase dimulai — dipakai semua klien untuk menghitung sisa timer yang sama. */
   fase_mulai: string | null
@@ -46,15 +57,6 @@ export interface Peserta {
   nama: string
   saldo: number
   created_at: string
-}
-
-export interface PilihanWarna {
-  id: number
-  peserta_id: string
-  putaran: number
-  warna: Warna
-  /** true jika warna dipilihkan otomatis oleh sistem karena peserta tidak sempat memilih. */
-  otomatis: boolean
 }
 
 export interface JawabanPeserta {

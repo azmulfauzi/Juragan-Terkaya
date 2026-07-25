@@ -39,8 +39,10 @@ Skrip itu membuat semua tabel, mengaktifkan realtime, dan menyiapkan fungsi rese
 Aman dijalankan berulang kali.
 
 > Untuk database yang **sudah terlanjur dibuat** dengan skema lama, jalankan juga
-> [`supabase/migrasi-02-kecepatan.sql`](supabase/migrasi-02-kecepatan.sql).
-> Database baru tidak perlu — `schema.sql` sudah mencakupnya.
+> migrasi berikut secara berurutan:
+> [`migrasi-02-kecepatan.sql`](supabase/migrasi-02-kecepatan.sql) lalu
+> [`migrasi-03-tema.sql`](supabase/migrasi-03-tema.sql).
+> Database baru tidak perlu — `schema.sql` sudah mencakup semuanya.
 
 ### 3. Isi kredensial
 
@@ -75,8 +77,9 @@ halaman fasilitator pertama kali dibuka.
 
 Alur satu putaran:
 
-1. Fasilitator klik **Mulai Game** → sistem mengambil 1 soal acak dan langsung
-   menampilkannya ke seluruh peserta
+0. Fasilitator memilih **tema soal** untuk sesi itu (lihat Bank Soal di bawah)
+1. Fasilitator klik **Mulai Game** → sistem mengambil 1 soal acak dari tema
+   tersebut dan langsung menampilkannya ke seluruh peserta
 2. Semua peserta punya 30 detik untuk menjawab — tidak ada pembagian giliran,
    semua bermain di setiap soal
 3. Fasilitator memantau progress: siapa sudah menjawab dan berapa detik.
@@ -135,13 +138,25 @@ Semua ada di [`src/lib/config.ts`](src/lib/config.ts):
 
 PIN fasilitator diatur lewat `VITE_FASILITATOR_PIN` di `.env`.
 
-**Bank soal** tidak perlu diubah lewat kode — fasilitator dapat mengedit,
-menambah, dan menyimpannya langsung dari tombol **✏️ Edit Soal** di dashboard.
-Perubahan tersimpan permanen di database dan tidak ikut terhapus saat Reset.
+## Bank Soal & Tema
 
-> Warna pada soal kini hanya berfungsi sebagai **label pengelompokan** di editor,
-> memudahkan penyaringan saat bank soal sudah banyak. Warna tidak lagi
-> mempengaruhi jalannya permainan.
+Soal dikelompokkan ke dalam **tema** yang dibuat sendiri oleh fasilitator —
+misalnya "Literasi Keuangan UMKM", "Pencatatan Kas Harian", atau materi khusus
+untuk audiens tertentu. **Satu sesi permainan memakai satu tema**, sehingga materi
+bisa disesuaikan tanpa mengubah bank soal yang lain.
+
+Semuanya dikelola dari menu **📚 Bank Soal** di panel fasilitator:
+
+- Buat, ubah nama, dan hapus tema
+- Di dalam tema: tambah, ubah, duplikat, hapus soal, dengan pencarian
+- Setiap perubahan langsung tersimpan ke database saat tombol Simpan ditekan
+
+Tema dipilih di tab **🎮 Kendali** sebelum menekan Mulai Game, dan **terkunci
+selama game berjalan** supaya materi tidak berganti di tengah sesi — peringkat
+peserta jadi tidak sebanding kalau soalnya berpindah tema.
+
+Bank soal **tidak ikut terhapus** saat Reset, dan tema yang sedang dipilih tetap
+tersimpan supaya kelompok berikutnya bisa langsung mulai.
 
 ---
 
