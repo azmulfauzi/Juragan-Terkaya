@@ -21,13 +21,19 @@ import {
   SUKARELA_MEMPENGARUHI_SALDO,
   WARNA_META,
 } from '../lib/config'
-import { bacaIdPeserta, simpanIdPeserta, useGameState, useSisaWaktu } from '../lib/hooks'
+import {
+  bacaIdPeserta,
+  simpanIdPeserta,
+  useGameState,
+  useSisaWaktu,
+  type StatusKoneksi,
+} from '../lib/hooks'
 import { LABEL_OPSI, rupiah, selisih } from '../lib/format'
 import type { JawabanPeserta, Peserta as TPeserta, Pilihan, PilihanWarna, Soal, Transaksi, Warna } from '../lib/types'
 import TimerRing from '../components/TimerRing'
 
 export default function Peserta() {
-  const { state } = useGameState()
+  const { state, koneksi } = useGameState()
 
   const [peserta, setPeserta] = useState<TPeserta | null>(null)
   const [memuat, setMemuat] = useState(true)
@@ -228,6 +234,7 @@ export default function Peserta() {
   return (
     <div className="mx-auto min-h-screen w-full max-w-md px-4 pb-24 pt-4">
       <BadgeStatus peserta={peserta} warna={pilihanWarna?.warna ?? null} />
+      <BadgeKoneksi status={koneksi} />
 
       {galat && (
         <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
@@ -282,6 +289,13 @@ export default function Peserta() {
           faseReveal={state.fase === 'reveal'}
           onJawab={kirimJawaban}
         />
+      )}
+
+      {state?.show_insight && soal && (
+        <div className="animasi-muncul mt-4 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-5">
+          <h3 className="mb-2 font-bold text-amber-300">💡 Insight</h3>
+          <p className="text-sm leading-relaxed text-slate-200">{soal.insight}</p>
+        </div>
       )}
 
       {perluCatat && soal && (
@@ -409,6 +423,42 @@ function BadgeStatus({ peserta, warna }: { peserta: TPeserta; warna: Warna | nul
         </p>
         <p className="text-[10px] text-slate-500">{selisih(peserta.saldo - MODAL_AWAL)}</p>
       </div>
+    </div>
+  )
+}
+
+const META_KONEKSI: Record<StatusKoneksi, { teks: string; kelas: string; titik: string }> = {
+  terhubung: {
+    teks: 'Terhubung',
+    kelas: 'text-green-400',
+    titik: 'bg-green-400',
+  },
+  lambat: {
+    teks: 'Koneksi lambat — data tetap masuk, mungkin telat beberapa detik',
+    kelas: 'text-yellow-400',
+    titik: 'bg-yellow-400',
+  },
+  bermasalah: {
+    teks: 'Koneksi bermasalah — coba muat ulang halaman',
+    kelas: 'text-red-400',
+    titik: 'bg-red-400',
+  },
+}
+
+function BadgeKoneksi({ status }: { status: StatusKoneksi }) {
+  const meta = META_KONEKSI[status]
+  return (
+    <div className={`mb-3 flex items-center gap-2 px-1 text-[11px] ${meta.kelas}`}>
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.titik}`} />
+      <span className="flex-1">{meta.teks}</span>
+      {status === 'bermasalah' && (
+        <button
+          onClick={() => location.reload()}
+          className="shrink-0 rounded-md border border-red-500/50 px-2 py-0.5 font-medium transition hover:bg-red-500/10"
+        >
+          Muat ulang
+        </button>
+      )}
     </div>
   )
 }

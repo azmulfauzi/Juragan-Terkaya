@@ -5,6 +5,14 @@ import { sekarang } from './waktu'
 import type { GameState } from './types'
 
 /**
+ * Status koneksi peserta ke server.
+ * - terhubung  : realtime aktif, perubahan fase diterima seketika
+ * - lambat     : realtime putus, tapi data masih tersusul lewat polling 5 detik
+ * - bermasalah : server tidak bisa dihubungi sama sekali
+ */
+export type StatusKoneksi = 'terhubung' | 'lambat' | 'bermasalah'
+
+/**
  * Mendengarkan status game secara realtime.
  * Polling cadangan tiap 5 detik dipakai sebagai jaring pengaman bila koneksi
  * realtime peserta sempat terputus (sesuai kebutuhan resiliensi jaringan).
@@ -12,12 +20,16 @@ import type { GameState } from './types'
 export function useGameState() {
   const [state, setState] = useState<GameState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [dataOk, setDataOk] = useState(true)
+  const [realtimeOk, setRealtimeOk] = useState(false)
 
   const muat = useCallback(async () => {
     try {
       setState(await ambilGameState())
+      setDataOk(true)
       setError(null)
     } catch (e) {
+      setDataOk(false)
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [])
@@ -32,7 +44,7 @@ export function useGameState() {
         { event: 'UPDATE', schema: 'public', table: 'game_state' },
         (payload) => setState(payload.new as GameState),
       )
-      .subscribe()
+      .subscribe((status) => setRealtimeOk(status === 'SUBSCRIBED'))
 
     const polling = setInterval(muat, 5000)
 
@@ -42,7 +54,9 @@ export function useGameState() {
     }
   }, [muat])
 
-  return { state, error, muatUlang: muat }
+  const koneksi: StatusKoneksi = !dataOk ? 'bermasalah' : realtimeOk ? 'terhubung' : 'lambat'
+
+  return { state, error, koneksi, muatUlang: muat }
 }
 
 /**
