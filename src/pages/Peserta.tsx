@@ -32,7 +32,7 @@ import {
   useSisaWaktu,
   type StatusKoneksi,
 } from '../lib/hooks'
-import { LABEL_OPSI, rupiah, selisih } from '../lib/format'
+import { LABEL_OPSI, jawabanCocok, rupiah, selisih } from '../lib/format'
 import type { JawabanPeserta, Peserta as TPeserta, Pilihan, Soal, Transaksi } from '../lib/types'
 import TimerRing from '../components/TimerRing'
 
@@ -183,11 +183,11 @@ export default function Peserta() {
 
   // ── Aksi: kirim jawaban ──────────────────────────────────────────────
   const kirimJawaban = useCallback(
-    async (pilihan: Pilihan | null) => {
+    async (pilihan: Pilihan[] | null) => {
       if (!peserta || !state || !soal || jawaban || mengirim) return
       setMengirim(true)
       try {
-        const benar = pilihan !== null && pilihan === soal.jawaban
+        const benar = jawabanCocok(pilihan, soal.jawaban_benar)
 
         // Lama menjawab dihitung dari jam server agar adil lintas perangkat.
         // Dibulatkan: koreksi jam server menghasilkan pecahan milidetik,
@@ -207,7 +207,7 @@ export default function Peserta() {
           peserta_id: peserta.id,
           putaran: state.putaran,
           soal_id: soal.id,
-          pilihan,
+          pilihan_ganda: pilihan,
           benar,
           wajib: true,
           delta_saldo: delta,
@@ -505,13 +505,25 @@ function FaseSoal({
   jawaban: JawabanPeserta | null
   mengirim: boolean
   faseReveal: boolean
-  onJawab: (p: Pilihan) => void
+  onJawab: (p: Pilihan[]) => void
 }) {
   const efek = EFEK_META[soal.efek]
   /** Hasil hanya boleh terlihat setelah fasilitator menekan "Reveal Jawaban". */
   const terbuka = faseReveal
   const sudahJawab = jawaban !== null
   const habis = sisa === 0
+
+  const jumlahBenar = soal.jawaban_benar.length
+  const ganda = jumlahBenar > 1
+
+  // Pilihan sementara sebelum dikirim — hanya dipakai pada soal berjawaban ganda.
+  const [dipilih, setDipilih] = useState<Pilihan[]>([])
+  useEffect(() => {
+    setDipilih([])
+  }, [soal.id])
+
+  const alihkanPilihan = (label: Pilihan) =>
+    setDipilih((d) => (d.includes(label) ? d.filter((x) => x !== label) : [...d, label]))
 
   return (
     <div className="animasi-muncul space-y-4">
@@ -548,11 +560,19 @@ function FaseSoal({
 
         <p className="text-[15px] leading-relaxed text-slate-100">{soal.teks}</p>
 
+        {jumlahBenar > 1 && !sudahJawab && !terbuka && (
+          <p className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300">
+            ⚠️ Soal ini punya {jumlahBenar} jawaban benar — pilih semuanya, lalu tekan Kirim.
+          </p>
+        )}
+
         <div className="mt-4 space-y-2">
           {soal.opsi.map((teks, i) => {
             const label = LABEL_OPSI[i]
-            const iniJawabanBenar = label === soal.jawaban
-            const iniPilihanSaya = jawaban?.pilihan === label
+            const iniJawabanBenar = soal.jawaban_benar.includes(label)
+            const iniPilihanSaya = sudahJawab
+              ? (jawaban?.pilihan_ganda ?? []).includes(label)
+              : dipilih.includes(label)
 
             let gaya = 'border-slate-600 bg-slate-900 hover:border-amber-400'
             if (terbuka) {
@@ -566,12 +586,14 @@ function FaseSoal({
               gaya = iniPilihanSaya
                 ? 'border-amber-400 bg-amber-500/10'
                 : 'border-slate-700 bg-slate-900 opacity-40'
+            } else if (iniPilihanSaya) {
+              gaya = 'border-amber-400 bg-amber-500/10'
             }
 
             return (
               <button
                 key={label}
-                onClick={() => onJawab(label)}
+                onClick={() => (ganda ? alihkanPilihan(label) : onJawab([label]))}
                 disabled={sudahJawab || mengirim || habis || terbuka}
                 className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm text-slate-100 transition disabled:cursor-default ${gaya}`}
               >
@@ -586,6 +608,20 @@ function FaseSoal({
             )
           })}
         </div>
+
+        {/* Soal berjawaban ganda perlu tombol kirim tersendiri — sekali sentuh
+            tidak bisa dipakai karena peserta harus memilih beberapa opsi. */}
+        {ganda && !sudahJawab && !terbuka && (
+          <button
+            onClick={() => onJawab(dipilih)}
+            disabled={dipilih.length === 0 || mengirim || habis}
+            className="mt-3 w-full rounded-xl bg-amber-500 py-3 font-bold text-slate-900 transition hover:bg-amber-400 active:scale-[.98] disabled:opacity-40"
+          >
+            {dipilih.length === 0
+              ? 'Pilih jawabanmu dulu'
+              : `Kirim Jawaban (${dipilih.join(' & ')})`}
+          </button>
+        )}
       </div>
 
       {/* Hasil — hanya setelah fasilitator membuka jawaban */}
@@ -622,7 +658,7 @@ function HasilJawaban({ jawaban, soal }: { jawaban: JawabanPeserta; soal: Soal }
   const benar = jawaban.benar
   const judul = benar
     ? '✅ Jawaban benar!'
-    : jawaban.pilihan === null
+    : jawaban.pilihan_ganda === null
       ? '⏰ Waktu habis!'
       : '❌ Jawaban salah'
 

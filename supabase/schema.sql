@@ -50,7 +50,8 @@ create table if not exists jawaban (
   peserta_id     uuid    not null references peserta(id) on delete cascade,
   putaran        int     not null,
   soal_id        int     not null,
-  pilihan        text,                      -- null = tidak menjawab (timeout)
+  -- Daftar huruf yang dipilih peserta. null = tidak menjawab (timeout).
+  pilihan_ganda  jsonb,
   benar          boolean not null default false,
   wajib          boolean not null default false,
   delta_saldo    bigint  not null default 0,
@@ -77,14 +78,18 @@ create table if not exists transaksi (
 -- Bank soal (dapat diedit penuh lewat menu Bank Soal di UI fasilitator).
 -- Nomor soal dibuat database agar tidak kembar saat soal ditambahkan berdekatan.
 create table if not exists soal (
-  id        bigserial primary key,
-  tema_id   bigint references tema(id) on delete cascade,
-  teks      text   not null,
-  opsi      jsonb  not null,
-  jawaban   text   not null,
-  nominal   bigint not null default 0,
-  efek      text   not null,
-  insight   text   not null default ''
+  id             bigserial primary key,
+  tema_id        bigint  references tema(id) on delete cascade,
+  -- Soal nonaktif tetap tersimpan tapi tidak ikut diundi ke peserta.
+  aktif          boolean not null default true,
+  teks           text    not null,
+  -- 2 sampai 6 opsi, ditampilkan berlabel A, B, C, dan seterusnya.
+  opsi           jsonb   not null,
+  -- Daftar huruf, misal ["A"] atau ["A","C"]. Peserta harus memilih persis semuanya.
+  jawaban_benar  jsonb   not null default '["A"]'::jsonb,
+  nominal        bigint  not null default 0,
+  efek           text    not null,
+  insight        text    not null default ''
 );
 
 -- Pastikan baris status game selalu ada.

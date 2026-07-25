@@ -40,8 +40,9 @@ Aman dijalankan berulang kali.
 
 > Untuk database yang **sudah terlanjur dibuat** dengan skema lama, jalankan juga
 > migrasi berikut secara berurutan:
-> [`migrasi-02-kecepatan.sql`](supabase/migrasi-02-kecepatan.sql) lalu
-> [`migrasi-03-tema.sql`](supabase/migrasi-03-tema.sql).
+> [`migrasi-02-kecepatan.sql`](supabase/migrasi-02-kecepatan.sql),
+> [`migrasi-03-tema.sql`](supabase/migrasi-03-tema.sql), lalu
+> [`migrasi-04-opsi-fleksibel.sql`](supabase/migrasi-04-opsi-fleksibel.sql).
 > Database baru tidak perlu — `schema.sql` sudah mencakup semuanya.
 
 ### 3. Isi kredensial
@@ -149,7 +150,16 @@ Semuanya dikelola dari menu **📚 Bank Soal** di panel fasilitator:
 
 - Buat, ubah nama, dan hapus tema
 - Di dalam tema: tambah, ubah, duplikat, hapus soal, dengan pencarian
+- **Centang soal mana saja yang ikut dimainkan** — soal yang tidak dicentang tetap
+  tersimpan tapi tidak akan diundi ke peserta
 - Setiap perubahan langsung tersimpan ke database saat tombol Simpan ditekan
+
+### Bentuk soal
+
+- **2 sampai 6 pilihan jawaban** (A–F), ditambah atau dikurangi per soal
+- **Jawaban benar boleh lebih dari satu**, misal "A & C". Peserta harus memilih
+  **persis semuanya** — kurang satu atau lebih satu tetap dihitung salah, dan
+  mereka diberi tahu ada berapa jawaban benar sebelum menjawab
 
 Tema dipilih di tab **🎮 Kendali** sebelum menekan Mulai Game, dan **terkunci
 selama game berjalan** supaya materi tidak berganti di tengah sesi — peringkat

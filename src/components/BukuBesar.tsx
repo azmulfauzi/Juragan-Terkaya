@@ -34,7 +34,7 @@ export default function BukuBesar({
                   <span className="text-green-400">benar</span>
                 ) : (
                   <span className="text-red-400">
-                    {r.jawaban.pilihan === null ? 'tidak menjawab' : 'salah'}
+                    {r.jawaban.pilihan_ganda === null ? 'tidak menjawab' : 'salah'}
                   </span>
                 )}
               </p>

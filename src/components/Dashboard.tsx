@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { MODAL_AWAL } from '../lib/config'
-import { rupiah, selisih } from '../lib/format'
+import { gabungPilihan, rupiah, selisih } from '../lib/format'
 import { formatRataWaktu, hitungPeringkat } from '../lib/peringkat'
 import { hitungBukuBesar } from '../lib/bukuBesar'
 import BukuBesar from './BukuBesar'
@@ -346,7 +346,7 @@ function KelompokJawaban({
                 {(j.waktu_jawab_ms / 1000).toFixed(1)}s
               </span>
             )}
-            <span className="text-slate-500">{j.pilihan ?? '⏰'}</span>
+            <span className="text-slate-500">{gabungPilihan(j.pilihan_ganda) || '⏰'}</span>
             <span>{j.benar ? '✅' : '❌'}</span>
           </span>
         </li>

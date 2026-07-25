@@ -16,7 +16,7 @@ import {
 import { DURASI_SOAL, EFEK_META } from '../lib/config'
 import { useGameState, useRealtimeTabel, useSisaWaktu } from '../lib/hooks'
 import { sekarang } from '../lib/waktu'
-import { LABEL_OPSI, rupiah } from '../lib/format'
+import { LABEL_OPSI, gabungPilihan, rupiah } from '../lib/format'
 import type { JawabanPeserta, Soal, Tema } from '../lib/types'
 import PinGate from '../components/PinGate'
 import TimerRing from '../components/TimerRing'
@@ -727,10 +727,16 @@ function KartuSoal({
 
       <p className="text-base leading-relaxed text-slate-100">{soal.teks}</p>
 
+      {soal.jawaban_benar.length > 1 && (
+        <p className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300">
+          Soal berjawaban ganda — peserta harus memilih {soal.jawaban_benar.length} opsi sekaligus.
+        </p>
+      )}
+
       <div className="mt-4 space-y-2">
         {soal.opsi.map((teks, i) => {
           const label = LABEL_OPSI[i]
-          const benar = label === soal.jawaban
+          const benar = soal.jawaban_benar.includes(label)
           return (
             <div
               key={label}
@@ -817,11 +823,11 @@ function RekapSingkat({
                 )}
                 {terbuka ? (
                   <>
-                    <span className="text-slate-500">{j.pilihan ?? '⏰'}</span>
+                    <span className="text-slate-500">{gabungPilihan(j.pilihan_ganda)}</span>
                     <span>{j.benar ? '✅' : '❌'}</span>
                   </>
                 ) : (
-                  <span className="text-amber-400">{j.pilihan === null ? '⏰' : '📌'}</span>
+                  <span className="text-amber-400">{j.pilihan_ganda === null ? '⏰' : '📌'}</span>
                 )}
               </span>
             </li>

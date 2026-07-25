@@ -178,6 +178,18 @@ export async function ambilSoalTema(temaId: number): Promise<Soal[]> {
   return cek(data, error, 'Gagal membaca soal tema')
 }
 
+/** Menyalakan atau mematikan satu soal dari daftar yang diundi. */
+export async function ubahAktifSoal(id: number, aktif: boolean): Promise<void> {
+  const { error } = await supabase.from('soal').update({ aktif }).eq('id', id)
+  if (error) throw new Error(`Gagal mengubah status soal: ${error.message}`)
+}
+
+/** Menyalakan atau mematikan seluruh soal dalam satu tema sekaligus. */
+export async function ubahAktifSemuaSoal(temaId: number, aktif: boolean): Promise<void> {
+  const { error } = await supabase.from('soal').update({ aktif }).eq('tema_id', temaId)
+  if (error) throw new Error(`Gagal mengubah status soal: ${error.message}`)
+}
+
 export async function ambilSoalById(id: number): Promise<Soal | null> {
   const { data, error } = await supabase.from('soal').select('*').eq('id', id).maybeSingle()
   if (error) throw new Error(`Gagal membaca soal: ${error.message}`)
@@ -223,14 +235,15 @@ export async function hapusSoal(id: number): Promise<void> {
 // ──────────────────────── PEMILIHAN SOAL ACAK ────────────────────────
 
 /**
- * Memilih 1 soal acak dari seluruh bank soal, menghindari soal yang baru
- * dipakai. Jika semuanya sudah terpakai, riwayat diabaikan (fallback).
+ * Memilih 1 soal acak dari soal yang AKTIF, menghindari soal yang baru dipakai.
+ * Jika semua soal aktif sudah terpakai, riwayat diabaikan (fallback).
  */
 export function pilihSoalAcak(semuaSoal: Soal[], riwayat: number[]): Soal | null {
-  if (semuaSoal.length === 0) return null
+  const aktif = semuaSoal.filter((s) => s.aktif)
+  if (aktif.length === 0) return null
 
-  const belumDipakai = semuaSoal.filter((s) => !riwayat.includes(s.id))
-  const kandidat = belumDipakai.length > 0 ? belumDipakai : semuaSoal
+  const belumDipakai = aktif.filter((s) => !riwayat.includes(s.id))
+  const kandidat = belumDipakai.length > 0 ? belumDipakai : aktif
   return kandidat[Math.floor(Math.random() * kandidat.length)]
 }
 

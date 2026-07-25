@@ -10,7 +10,7 @@ import type { Soal } from '../lib/types'
  *   1. Pisahkan transaksi pribadi dan usaha
  *   2. Catat setiap transaksi usaha secara konsisten
  */
-export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
+export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id' | 'aktif'>[] = [
   {
     teks: 'Warung nasi Bu Sari hari ini laris. Total uang tunai yang diterima dari pembeli Rp2.500.000. Apa yang seharusnya dilakukan Bu Sari?',
     opsi: [
@@ -18,7 +18,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak perlu dicatat, karena uangnya langsung dipakai belanja besok',
       'Catat nanti saja di akhir bulan kalau sempat',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 2_500_000,
     efek: 'masuk',
     insight:
@@ -31,7 +31,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat Rp1.200.000 sebagai pengeluaran usaha (pembelian bahan baku)',
       'Catat setengahnya saja, sisanya dianggap stok',
     ],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 1_200_000,
     efek: 'keluar',
     insight:
@@ -44,7 +44,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak dicatat sama sekali sampai uangnya diterima',
       'Catat sebagai PIUTANG Rp1.500.000 — kas usaha belum bertambah',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 0,
     efek: 'netral',
     insight:
@@ -57,7 +57,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak usah dicatat, kan uangnya memang milik Pak Budi sendiri',
       'Catat sebagai biaya pendidikan usaha',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 500_000,
     efek: 'keluar',
     insight:
@@ -70,7 +70,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak perlu dicatat karena bukan pembelian barang',
       'Catat Rp350.000 sebagai biaya operasional usaha',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 350_000,
     efek: 'keluar',
     insight:
@@ -83,7 +83,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai barang titipan (konsinyasi) — belum ada perubahan kas',
       'Catat sebagai pemasukan senilai harga jual keripik',
     ],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 0,
     efek: 'netral',
     insight:
@@ -96,7 +96,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak perlu, karena karyawan masih saudara sendiri',
       'Perlu, tapi hanya kalau ada slip gaji resmi',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 1_800_000,
     efek: 'keluar',
     insight:
@@ -105,7 +105,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
   {
     teks: 'Selama sebulan, total pemasukan usaha Rp5.000.000 dan total pengeluaran Rp3.200.000. Berapa laba bersih bulan itu?',
     opsi: ['Rp8.200.000', 'Rp1.800.000', 'Rp3.200.000'],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 0,
     efek: 'netral',
     insight:
@@ -119,7 +119,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat hanya kalau nanti ditarik tunai',
       'Catat Rp1.750.000 sebagai pemasukan usaha',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 1_750_000,
     efek: 'masuk',
     insight:
@@ -132,7 +132,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak dicatat karena kios bukan milik sendiri',
       'Catat sebagai penambahan aset usaha',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 2_000_000,
     efek: 'keluar',
     insight:
@@ -145,7 +145,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai HUTANG Rp900.000 — kas usaha belum berkurang',
       'Tidak dicatat sampai pembayaran dilakukan',
     ],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 0,
     efek: 'netral',
     insight:
@@ -154,7 +154,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
   {
     teks: 'Bu Ratna menerima pesanan katering senilai Rp4.000.000. Pelanggan membayar uang muka (DP) 50% secara tunai hari ini. Berapa yang dicatat sebagai kas masuk?',
     opsi: ['Rp4.000.000', 'Rp1.000.000', 'Rp2.000.000'],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 2_000_000,
     efek: 'masuk',
     insight:
@@ -167,7 +167,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai pembelian aset usaha',
       'Tidak perlu dicatat, motor kan bisa dipakai antar pesanan juga',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 1_500_000,
     efek: 'keluar',
     insight:
@@ -180,7 +180,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai pemasukan tunai senilai harga gula',
       'Catat sebagai barter — nilai barang keluar dan jasa masuk dicatat, kas tidak berubah',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 0,
     efek: 'netral',
     insight:
@@ -193,7 +193,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Pengeluaran usaha Rp450.000 (biaya kemasan)',
       'Pemasukan usaha karena menambah nilai jual produk',
     ],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 450_000,
     efek: 'keluar',
     insight:
@@ -207,7 +207,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak dicatat, karena bazar hanya kegiatan sesekali',
       'Catat setelah dikurangi uang makan panitia',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 3_200_000,
     efek: 'masuk',
     insight:
@@ -220,7 +220,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat Rp750.000 sebagai pengeluaran usaha (pembayaran cicilan)',
       'Catat sebagai pemasukan karena mengurangi hutang',
     ],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 750_000,
     efek: 'keluar',
     insight:
@@ -233,7 +233,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak dicatat, kan uangnya milik sendiri',
       'Catat sebagai tambahan modal — kas usaha bertambah Rp2.000.000',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 2_000_000,
     efek: 'masuk',
     insight:
@@ -246,7 +246,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Hapus saja catatan penjualan yang lama',
       'Tidak dicatat, anggap sebagai apes',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 300_000,
     efek: 'keluar',
     insight:
@@ -259,7 +259,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat Rp1.500.000 sebagai kas masuk (pelunasan piutang)',
       'Catat sebagai penjualan baru Rp1.500.000',
     ],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 1_500_000,
     efek: 'masuk',
     insight:
@@ -272,7 +272,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Perlu, tapi digabung saja dengan bensin motor harian keluarga',
       'Perlu — catat Rp150.000 sebagai biaya transportasi usaha',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 150_000,
     efek: 'keluar',
     insight:
@@ -285,7 +285,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai biaya promosi usaha',
       'Tidak dicatat karena arisan uangnya akan kembali',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 200_000,
     efek: 'keluar',
     insight:
@@ -294,7 +294,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
   {
     teks: 'Modal bahan untuk 1 porsi bakso Rp8.000 dan dijual Rp15.000. Berapa keuntungan kotor per porsi?',
     opsi: ['Rp15.000', 'Rp8.000', 'Rp7.000'],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 0,
     efek: 'netral',
     insight:
@@ -308,7 +308,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Tidak dicatat, karena yang menjual adalah reseller',
       'Catat sebagai hutang kepada reseller',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 2_800_000,
     efek: 'masuk',
     insight:
@@ -321,7 +321,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai biaya bahan baku',
       'Catat Rp1.500.000 sebagai pembelian peralatan usaha — kas berkurang',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 1_500_000,
     efek: 'keluar',
     insight:
@@ -334,7 +334,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai kas masuk dari pinjaman — dan catat hutang Rp5.000.000',
       'Tidak dicatat karena uangnya harus dikembalikan',
     ],
-    jawaban: 'B',
+    jawaban_benar: ['B'],
     nominal: 5_000_000,
     efek: 'masuk',
     insight:
@@ -347,7 +347,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Catat sebagai kerugian usaha permanen',
       'Catat Rp250.000 sebagai potongan penjualan — mengurangi hasil penjualan',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 250_000,
     efek: 'keluar',
     insight:
@@ -360,7 +360,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Pengambilan pribadi (prive) karena sifatnya pemberian',
       'Tidak dicatat karena hanya setahun sekali',
     ],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 1_000_000,
     efek: 'keluar',
     insight:
@@ -373,7 +373,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
       'Hanya merepotkan saat menghitung, tapi tidak berpengaruh',
       'Tidak bisa diketahui apakah usaha benar-benar untung atau justru disubsidi uang pribadi',
     ],
-    jawaban: 'C',
+    jawaban_benar: ['C'],
     nominal: 0,
     efek: 'netral',
     insight:
@@ -382,7 +382,7 @@ export const SOAL_DEFAULT: Omit<Soal, 'id' | 'tema_id'>[] = [
   {
     teks: 'Modal awal usaha Rp10.000.000. Selama sebulan pemasukan Rp7.500.000 dan pengeluaran Rp4.500.000. Berapa saldo kas usaha di akhir bulan?',
     opsi: ['Rp13.000.000', 'Rp3.000.000', 'Rp22.000.000'],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 0,
     efek: 'netral',
     insight:

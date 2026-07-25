@@ -6,20 +6,23 @@ import {
   buatTema,
   hapusSoal,
   hapusTema,
+  ubahAktifSemuaSoal,
+  ubahAktifSoal,
   ubahSoal,
   ubahTema,
 } from '../lib/api'
 import { EFEK_META } from '../lib/config'
-import { LABEL_OPSI, rupiah } from '../lib/format'
+import { LABEL_OPSI, MAKS_OPSI, MIN_OPSI, gabungPilihan, rupiah } from '../lib/format'
 import type { Efek, Pilihan, Soal, Tema } from '../lib/types'
 
 /** Soal kosong untuk form tambah. */
 function soalBaru(temaId: number): Omit<Soal, 'id'> {
   return {
     tema_id: temaId,
+    aktif: true,
     teks: '',
     opsi: ['', '', ''],
-    jawaban: 'A',
+    jawaban_benar: ['A'],
     nominal: 0,
     efek: 'netral',
     insight: '',
@@ -352,6 +355,8 @@ function IsiTema({ tema, onKembali }: { tema: Tema; onKembali: () => void }) {
       )
     : daftar
 
+  const jumlahAktif = daftar.filter((s) => s.aktif).length
+
   if (edit) {
     return (
       <FormSoal
@@ -377,9 +382,29 @@ function IsiTema({ tema, onKembali }: { tema: Tema; onKembali: () => void }) {
         ← Semua tema
       </button>
 
-      <div className="mb-4">
-        <h2 className="text-lg font-bold text-slate-100">{tema.nama}</h2>
-        <p className="text-xs text-slate-400">{daftar.length} soal</p>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-slate-100">{tema.nama}</h2>
+          <p className="text-xs text-slate-400">
+            <b className="text-amber-400">{jumlahAktif}</b> dari {daftar.length} soal akan dimainkan
+          </p>
+        </div>
+
+        {daftar.length > 0 && (
+          <button
+            onClick={async () => {
+              try {
+                await ubahAktifSemuaSoal(tema.id, jumlahAktif < daftar.length)
+                await muat()
+              } catch (e) {
+                setGalat(e instanceof Error ? e.message : String(e))
+              }
+            }}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-slate-800"
+          >
+            {jumlahAktif < daftar.length ? '☑ Centang semua' : '☐ Hapus semua centang'}
+          </button>
+        )}
       </div>
 
       {galat && (
@@ -416,18 +441,42 @@ function IsiTema({ tema, onKembali }: { tema: Tema; onKembali: () => void }) {
           {terlihat.map((s) => (
             <div
               key={s.id}
-              className="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-800/50 pr-2 transition hover:border-amber-400"
+              className={`flex items-start gap-2 rounded-xl border bg-slate-800/50 pr-2 transition hover:border-amber-400 ${
+                s.aktif ? 'border-slate-700' : 'border-slate-800 opacity-50'
+              }`}
             >
+              {/* Centang menentukan soal ini ikut diundi ke peserta atau tidak. */}
+              <label
+                className="flex shrink-0 cursor-pointer items-center py-2.5 pl-3"
+                title={s.aktif ? 'Soal ikut dimainkan' : 'Soal disimpan tapi tidak dimainkan'}
+              >
+                <input
+                  type="checkbox"
+                  checked={s.aktif}
+                  onChange={async (e) => {
+                    try {
+                      await ubahAktifSoal(s.id, e.target.checked)
+                      await muat()
+                    } catch (err) {
+                      setGalat(err instanceof Error ? err.message : String(err))
+                    }
+                  }}
+                  className="h-4 w-4 accent-amber-500"
+                />
+              </label>
+
               <button
                 onClick={() => setEdit(s)}
-                className="min-w-0 flex-1 px-3 py-2.5 text-left"
+                className="min-w-0 flex-1 py-2.5 pr-3 text-left"
               >
                 <span className="block truncate text-sm text-slate-100">
                   {s.teks || <i className="text-slate-500">(belum diisi)</i>}
                 </span>
                 <span className="mt-0.5 block text-[11px] text-slate-400">
                   #{s.id} · {EFEK_META[s.efek].emoji} {EFEK_META[s.efek].label}
-                  {s.efek !== 'netral' && ` ${rupiah(s.nominal)}`} · Jawaban {s.jawaban}
+                  {s.efek !== 'netral' && ` ${rupiah(s.nominal)}`} ·{' '}
+                  {s.opsi.length} opsi · Jawaban {gabungPilihan(s.jawaban_benar)}
+                  {!s.aktif && ' · tidak dimainkan'}
                 </span>
               </button>
 
@@ -494,9 +543,36 @@ function FormSoal({
   const netral = draft.efek === 'netral'
   const baru = !('id' in awal)
 
+  /** Menandai atau membatalkan satu opsi sebagai jawaban benar. */
+  const alihkanBenar = (label: Pilihan) =>
+    setDraft((d) => ({
+      ...d,
+      jawaban_benar: d.jawaban_benar.includes(label)
+        ? d.jawaban_benar.filter((x) => x !== label)
+        : [...d.jawaban_benar, label].sort(),
+    }))
+
+  /**
+   * Menghapus satu opsi. Label opsi bergeser (C jadi B, dst), jadi penanda
+   * jawaban benar ikut digeser supaya tidak menunjuk opsi yang keliru.
+   */
+  function hapusOpsi(indeks: number) {
+    setDraft((d) => {
+      const opsiBaru = d.opsi.filter((_, j) => j !== indeks)
+      const benarBaru = d.jawaban_benar
+        .map((label) => LABEL_OPSI.indexOf(label))
+        .filter((i) => i !== indeks)
+        .map((i) => (i > indeks ? i - 1 : i))
+        .map((i) => LABEL_OPSI[i])
+      return { ...d, opsi: opsiBaru, jawaban_benar: benarBaru }
+    })
+  }
+
   async function simpan() {
     if (!draft.teks.trim()) return setGalat('Pertanyaan belum diisi.')
     if (draft.opsi.some((o) => !o.trim())) return setGalat('Semua pilihan jawaban harus diisi.')
+    if (draft.jawaban_benar.length === 0)
+      return setGalat('Tandai minimal satu opsi sebagai jawaban benar.')
 
     setProses(true)
     setGalat(null)
@@ -544,12 +620,12 @@ function FormSoal({
           <div className="space-y-2">
             {draft.opsi.map((o, i) => {
               const label = LABEL_OPSI[i]
-              const benar = draft.jawaban === label
+              const benar = draft.jawaban_benar.includes(label)
               return (
                 <div key={i} className="flex items-center gap-2">
                   <button
-                    onClick={() => ubah('jawaban', label as Pilihan)}
-                    title="Jadikan ini jawaban benar"
+                    onClick={() => alihkanBenar(label)}
+                    title={benar ? 'Batalkan sebagai jawaban benar' : 'Jadikan jawaban benar'}
                     className={`w-9 shrink-0 rounded-md py-1.5 text-center text-xs font-bold transition ${
                       benar
                         ? 'bg-green-500 text-slate-900'
@@ -565,14 +641,42 @@ function FormSoal({
                     }
                     className={kelasInput}
                   />
+                  {draft.opsi.length > MIN_OPSI && (
+                    <button
+                      onClick={() => hapusOpsi(i)}
+                      title="Hapus opsi ini"
+                      className="shrink-0 rounded-md px-2 py-1.5 text-sm text-slate-400 transition hover:bg-red-500/20 hover:text-red-400"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               )
             })}
           </div>
-          <p className="mt-1.5 text-[11px] text-slate-500">
-            Klik huruf A/B/C untuk menandai jawaban yang benar — saat ini{' '}
-            <b className="text-green-400">{draft.jawaban}</b>.
-          </p>
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {draft.opsi.length < MAKS_OPSI && (
+              <button
+                onClick={() => ubah('opsi', [...draft.opsi, ''])}
+                className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-slate-800"
+              >
+                ➕ Tambah opsi ({LABEL_OPSI[draft.opsi.length]})
+              </button>
+            )}
+            <p className="text-[11px] text-slate-500">
+              Klik hurufnya untuk menandai jawaban benar. Boleh lebih dari satu — saat ini{' '}
+              <b className="text-green-400">{gabungPilihan(draft.jawaban_benar)}</b>.
+            </p>
+          </div>
+
+          {draft.jawaban_benar.length > 1 && (
+            <p className="mt-2 rounded-lg border border-amber-400/40 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-amber-300">
+              Soal berjawaban ganda: peserta harus memilih <b>persis semuanya</b> — kurang satu atau
+              lebih satu tetap dihitung salah. Mereka akan diberi tahu bahwa ada{' '}
+              {draft.jawaban_benar.length} jawaban benar.
+            </p>
+          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

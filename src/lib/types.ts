@@ -2,7 +2,9 @@
 // Nama field sengaja memakai Bahasa Indonesia agar selaras dengan PRD & skema database.
 
 export type Efek = 'masuk' | 'keluar' | 'netral'
-export type Pilihan = 'A' | 'B' | 'C'
+
+/** Label opsi jawaban. Satu soal boleh punya 2 sampai 6 opsi. */
+export type Pilihan = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
 
 /**
  * Wadah pengelompokan soal yang dibuat fasilitator, misal "Literasi Keuangan
@@ -28,9 +30,13 @@ export type Fase = 'menunggu' | 'soal' | 'reveal' | 'skor' | 'selesai'
 export interface Soal {
   id: number
   tema_id: number
+  /** Soal nonaktif tetap tersimpan tapi tidak ikut diundi ke peserta. */
+  aktif: boolean
   teks: string
+  /** 2 sampai 6 opsi, ditampilkan berlabel A, B, C, dan seterusnya. */
   opsi: string[]
-  jawaban: Pilihan
+  /** Boleh lebih dari satu, misal ['A', 'C']. Peserta harus memilih tepat semuanya. */
+  jawaban_benar: Pilihan[]
   nominal: number
   efek: Efek
   insight: string
@@ -65,7 +71,7 @@ export interface JawabanPeserta {
   putaran: number
   soal_id: number
   /** null = tidak menjawab sampai waktu habis (timeout). */
-  pilihan: Pilihan | null
+  pilihan_ganda: Pilihan[] | null
   benar: boolean
   /**
    * Sisa dari mekanik warna lama. Seluruh peserta kini menjawab setiap soal,
