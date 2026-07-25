@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
+  ambilJawabanPeserta,
   ambilJawabanSaya,
   ambilPeserta,
   ambilPilihanWarnaSaya,
   ambilSemuaJawaban,
   ambilSemuaPeserta,
+  ambilSemuaSoal,
   ambilSoalById,
   ambilTransaksiSaya,
   daftarPeserta,
@@ -25,8 +27,10 @@ import {
 } from '../lib/config'
 import { sekarang } from '../lib/waktu'
 import { useVersiKedaluwarsa } from '../lib/versi'
+import { hitungBukuBesar } from '../lib/bukuBesar'
 import PapanSkorPutaran from '../components/PapanSkorPutaran'
 import BannerVersi from '../components/BannerVersi'
+import BukuBesar from '../components/BukuBesar'
 import {
   bacaIdPeserta,
   simpanIdPeserta,
@@ -51,6 +55,10 @@ export default function Peserta() {
   const [soal, setSoal] = useState<Soal | null>(null)
   const [transaksi, setTransaksi] = useState<Transaksi[]>([])
   const [mengirim, setMengirim] = useState(false)
+
+  // Riwayat lengkap milik peserta ini, untuk buku besarnya sendiri.
+  const [jawabanSaya, setJawabanSaya] = useState<JawabanPeserta[]>([])
+  const [bankSoal, setBankSoal] = useState<Soal[]>([])
 
   // Dimuat hanya saat fase papan skor — tidak perlu dibawa sepanjang permainan.
   const [semuaPeserta, setSemuaPeserta] = useState<TPeserta[]>([])
@@ -148,6 +156,27 @@ export default function Peserta() {
   useEffect(() => {
     muatTransaksi()
   }, [muatTransaksi, putaran])
+
+  // ── Muat riwayat untuk buku besar ────────────────────────────────────
+  const muatRiwayat = useCallback(async () => {
+    if (!peserta) return
+    try {
+      const [jwb, soalSemua] = await Promise.all([
+        ambilJawabanPeserta(peserta.id),
+        bankSoal.length > 0 ? Promise.resolve(bankSoal) : ambilSemuaSoal(),
+      ])
+      setJawabanSaya(jwb)
+      setBankSoal(soalSemua)
+    } catch {
+      /* riwayat bukan data kritis — diamkan bila gagal */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peserta?.id])
+
+  // Disegarkan tiap ganti putaran dan tiap hasil dibukukan.
+  useEffect(() => {
+    muatRiwayat()
+  }, [muatRiwayat, putaran, fase === 'reveal'])
 
   // ── Segarkan saldo begitu fasilitator membukukan hasil putaran ──────
   useEffect(() => {
@@ -391,7 +420,12 @@ export default function Peserta() {
         />
       )}
 
-      {transaksi.length > 0 && <RiwayatTransaksi daftar={transaksi} />}
+      <BukuBesarSaya
+        peserta={peserta}
+        jawaban={jawabanSaya}
+        transaksi={transaksi}
+        soal={bankSoal}
+      />
     </div>
   )
 }
@@ -953,31 +987,60 @@ function FormCatatTransaksi({
   )
 }
 
-function RiwayatTransaksi({ daftar }: { daftar: Transaksi[] }) {
+/**
+ * Buku besar milik peserta sendiri — isi dan perhitungannya sama persis dengan
+ * yang dilihat fasilitator, karena memakai komponen dan fungsi yang sama.
+ * Dibuat lipat agar tidak memanjangkan layar saat sedang menjawab.
+ */
+function BukuBesarSaya({
+  peserta,
+  jawaban,
+  transaksi,
+  soal,
+}: {
+  peserta: TPeserta
+  jawaban: JawabanPeserta[]
+  transaksi: Transaksi[]
+  soal: Soal[]
+}) {
+  const [terbuka, setTerbuka] = useState(false)
+  const buku = useMemo(
+    () => hitungBukuBesar(peserta, jawaban, transaksi, soal),
+    [peserta, jawaban, transaksi, soal],
+  )
+
   return (
-    <div className="mt-6">
-      <h3 className="mb-2 text-sm font-semibold text-slate-400">📒 Catatan transaksimu</h3>
-      <div className="space-y-2">
-        {daftar.map((t) => (
-          <div
-            key={t.id}
-            className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-2"
+    <div className="mt-6 overflow-hidden rounded-2xl border border-slate-700 bg-slate-800/40">
+      <button
+        onClick={() => setTerbuka((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-800/60"
+      >
+        <span className="text-slate-500">{terbuka ? '▾' : '▸'}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-100">📒 Buku besarku</span>
+          <span className="text-[11px] text-slate-400">
+            {buku.baris.length} transaksi · {buku.jumlahBenar} benar · {buku.jumlahSalah} salah
+          </span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span
+            className={`block text-sm font-bold tabular-nums ${
+              peserta.saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
+            }`}
           >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-slate-200">{t.keterangan}</p>
-              <p className="text-[11px] text-slate-500">Putaran {t.putaran}</p>
-            </div>
-            <span
-              className={`ml-3 shrink-0 text-sm font-semibold tabular-nums ${
-                t.arah === 'masuk' ? 'text-green-400' : 'text-red-400'
-              }`}
-            >
-              {t.arah === 'masuk' ? '+' : '−'}
-              {rupiah(t.jumlah)}
-            </span>
-          </div>
-        ))}
-      </div>
+            {rupiah(peserta.saldo)}
+          </span>
+          <span className="block text-[10px] tabular-nums text-slate-400">
+            {selisih(peserta.saldo - MODAL_AWAL)}
+          </span>
+        </span>
+      </button>
+
+      {terbuka && (
+        <div className="border-t border-slate-700 px-4 py-3">
+          <BukuBesar buku={buku} milikSaya />
+        </div>
+      )}
     </div>
   )
 }

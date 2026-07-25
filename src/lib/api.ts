@@ -127,6 +127,16 @@ export async function ambilSemuaJawaban(): Promise<JawabanPeserta[]> {
   return cek(data, error, 'Gagal membaca jawaban')
 }
 
+/** Seluruh jawaban milik satu peserta, untuk menyusun buku besarnya. */
+export async function ambilJawabanPeserta(pesertaId: string): Promise<JawabanPeserta[]> {
+  const { data, error } = await supabase
+    .from('jawaban')
+    .select('*')
+    .eq('peserta_id', pesertaId)
+    .order('putaran', { ascending: true })
+  return cek(data, error, 'Gagal membaca riwayat jawaban')
+}
+
 export async function ambilJawabanSaya(
   pesertaId: string,
   putaran: number,

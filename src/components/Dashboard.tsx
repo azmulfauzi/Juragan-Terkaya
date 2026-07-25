@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
-import { BONUS_BENAR, DENDA, MODAL_AWAL, WARNA_META } from '../lib/config'
+import { MODAL_AWAL, WARNA_META } from '../lib/config'
 import { rupiah, selisih } from '../lib/format'
 import { formatRataWaktu, hitungPeringkat } from '../lib/peringkat'
+import { hitungBukuBesar } from '../lib/bukuBesar'
+import BukuBesar from './BukuBesar'
 import type { JawabanPeserta, Peserta, PilihanWarna, Soal, Transaksi } from '../lib/types'
 
 export interface DataDashboard {
@@ -232,65 +234,16 @@ function CatatanTransaksi({ data }: { data: DataDashboard }) {
   const [cari, setCari] = useState('')
   const [terbuka, setTerbuka] = useState<Set<string>>(new Set())
 
-  const soalPeta = useMemo(() => new Map(data.soal.map((s) => [s.id, s])), [data.soal])
-
-  const bukuBesar = useMemo(() => {
-    return data.peserta
-      .map((p) => {
-        const jawabanWajib = data.jawaban
-          .filter((j) => j.peserta_id === p.id && j.wajib)
-          .sort((a, b) => a.putaran - b.putaran)
-
-        // Keterangan yang diisi sendiri oleh peserta, diindeks per putaran.
-        const keteranganPeserta = new Map(
-          data.transaksi.filter((t) => t.peserta_id === p.id).map((t) => [t.putaran, t.keterangan]),
-        )
-
-        const baris = jawabanWajib.map((j, i) => {
-          const soal = soalPeta.get(j.soal_id)
-          const efekNominal = !soal
-            ? 0
-            : soal.efek === 'masuk'
-              ? soal.nominal
-              : soal.efek === 'keluar'
-                ? -soal.nominal
-                : 0
-
-          return {
-            urut: i + 1,
-            jawaban: j,
-            soal,
-            efekNominal,
-            keterangan: keteranganPeserta.get(j.putaran) ?? soal?.teks ?? '—',
-          }
-        })
-
-        const jumlahBenar = jawabanWajib.filter((j) => j.benar).length
-        const jumlahSalah = jawabanWajib.length - jumlahBenar
-        const totalBonus = jumlahBenar * BONUS_BENAR
-        const totalDenda = jumlahSalah * DENDA
-
-        // Saldo hasil hitung ulang harus sama dengan saldo tersimpan. Kalau
-        // beda, biasanya data dibuat dengan aturan skor lama atau ditulis oleh
-        // halaman peserta versi kedaluwarsa.
-        const saldoHitung =
-          MODAL_AWAL +
-          baris.reduce((n, r) => n + r.efekNominal, 0) +
-          totalBonus -
-          totalDenda
-
-        return {
+  const bukuBesar = useMemo(
+    () =>
+      data.peserta
+        .map((p) => ({
           peserta: p,
-          baris,
-          totalBonus,
-          totalDenda,
-          jumlahBenar,
-          jumlahSalah,
-          selisihHitung: p.saldo - saldoHitung,
-        }
-      })
-      .sort((a, b) => b.peserta.saldo - a.peserta.saldo)
-  }, [data.peserta, data.jawaban, data.transaksi, soalPeta])
+          buku: hitungBukuBesar(p, data.jawaban, data.transaksi, data.soal),
+        }))
+        .sort((a, b) => b.peserta.saldo - a.peserta.saldo),
+    [data.peserta, data.jawaban, data.transaksi, data.soal],
+  )
 
   const kunci = cari.trim().toLowerCase()
   const terlihat = kunci
@@ -350,7 +303,8 @@ function CatatanTransaksi({ data }: { data: DataDashboard }) {
                       {b.peserta.nama}
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      {b.baris.length} transaksi · {b.jumlahBenar} benar · {b.jumlahSalah} salah
+                      {b.buku.baris.length} transaksi · {b.buku.jumlahBenar} benar ·{' '}
+                      {b.buku.jumlahSalah} salah
                     </span>
                   </span>
                   <span className="shrink-0 text-right">
@@ -368,69 +322,8 @@ function CatatanTransaksi({ data }: { data: DataDashboard }) {
                 </button>
 
                 {dibuka && (
-                  <div className="border-t border-slate-700 px-4 py-3 text-sm">
-                    <BarisBuku label="Saldo awal" nilai={MODAL_AWAL} netral />
-
-                    {b.baris.length === 0 ? (
-                      <p className="py-3 text-center text-xs text-slate-500">
-                        Belum pernah terpilih sebagai peserta wajib.
-                      </p>
-                    ) : (
-                      <div className="my-2 space-y-2 border-y border-slate-700 py-2">
-                        {b.baris.map((r) => (
-                          <div key={r.jawaban.id}>
-                            <p className="text-xs text-slate-400">
-                              <span className="font-semibold text-slate-300">
-                                Transaksi {r.urut}
-                              </span>{' '}
-                              · Putaran {r.jawaban.putaran} · Soal #{r.jawaban.soal_id} ·{' '}
-                              {r.jawaban.benar ? (
-                                <span className="text-green-400">benar</span>
-                              ) : (
-                                <span className="text-red-400">
-                                  {r.jawaban.pilihan === null ? 'tidak menjawab' : 'salah'}
-                                </span>
-                              )}
-                            </p>
-                            <div className="mt-0.5 flex items-baseline justify-between gap-3">
-                              <span className="min-w-0 flex-1 text-slate-200">{r.keterangan}</span>
-                              <span
-                                className={`shrink-0 tabular-nums ${
-                                  r.efekNominal === 0
-                                    ? 'text-slate-500'
-                                    : r.efekNominal > 0
-                                      ? 'text-green-400'
-                                      : 'text-red-400'
-                                }`}
-                              >
-                                {r.efekNominal === 0 ? 'tanpa efek kas' : selisih(r.efekNominal)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <BarisBuku
-                      label={`Bonus jawaban benar (${b.jumlahBenar}×)`}
-                      nilai={b.totalBonus}
-                    />
-                    <BarisBuku
-                      label={`Denda jawaban salah (${b.jumlahSalah}×)`}
-                      nilai={-b.totalDenda}
-                    />
-
-                    <div className="mt-2 border-t border-slate-600 pt-2">
-                      <BarisBuku label="Saldo akhir" nilai={b.peserta.saldo} netral tebal />
-                    </div>
-
-                    {b.selisihHitung !== 0 && (
-                      <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] leading-relaxed text-amber-300">
-                        ⚠️ Saldo tersimpan berbeda {selisih(b.selisihHitung)} dari hasil hitung
-                        ulang. Biasanya karena data dibuat dengan aturan skor lama, atau ditulis
-                        oleh halaman peserta versi kedaluwarsa. Lakukan Reset sebelum sesi baru.
-                      </p>
-                    )}
+                  <div className="border-t border-slate-700 px-4 py-3">
+                    <BukuBesar buku={b.buku} />
                   </div>
                 )}
               </div>
@@ -438,36 +331,6 @@ function CatatanTransaksi({ data }: { data: DataDashboard }) {
           })}
         </div>
       )}
-    </div>
-  )
-}
-
-function BarisBuku({
-  label,
-  nilai,
-  netral,
-  tebal,
-}: {
-  label: string
-  nilai: number
-  /** true untuk saldo (bukan perubahan), ditampilkan tanpa tanda +/−. */
-  netral?: boolean
-  tebal?: boolean
-}) {
-  const warna = netral
-    ? 'text-slate-100'
-    : nilai === 0
-      ? 'text-slate-500'
-      : nilai > 0
-        ? 'text-green-400'
-        : 'text-red-400'
-
-  return (
-    <div className="flex items-baseline justify-between gap-3 py-0.5">
-      <span className={tebal ? 'font-semibold text-slate-100' : 'text-slate-400'}>{label}</span>
-      <span className={`shrink-0 tabular-nums ${tebal ? 'text-base font-bold' : ''} ${warna}`}>
-        {netral ? rupiah(nilai) : selisih(nilai)}
-      </span>
     </div>
   )
 }
