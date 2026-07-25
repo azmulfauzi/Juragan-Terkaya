@@ -23,7 +23,9 @@ import {
   WARNA_META,
 } from '../lib/config'
 import { sekarang } from '../lib/waktu'
+import { useVersiKedaluwarsa } from '../lib/versi'
 import PapanSkorPutaran from '../components/PapanSkorPutaran'
+import BannerVersi from '../components/BannerVersi'
 import {
   bacaIdPeserta,
   simpanIdPeserta,
@@ -37,6 +39,7 @@ import TimerRing from '../components/TimerRing'
 
 export default function Peserta() {
   const { state, koneksi } = useGameState()
+  const versiKedaluwarsa = useVersiKedaluwarsa()
 
   const [peserta, setPeserta] = useState<TPeserta | null>(null)
   const [memuat, setMemuat] = useState(true)
@@ -204,10 +207,14 @@ export default function Peserta() {
         const berpengaruh = wajib || SUKARELA_MEMPENGARUHI_SALDO
 
         // Lama menjawab dihitung dari jam server agar adil lintas perangkat.
+        // Dibulatkan: koreksi jam server menghasilkan pecahan milidetik,
+        // sedangkan kolom waktu_jawab_ms bertipe integer.
         const durasiMs = DURASI_SOAL * 1000
-        const waktuMs = state.fase_mulai
-          ? Math.max(0, Math.min(durasiMs, sekarang() - new Date(state.fase_mulai).getTime()))
-          : durasiMs
+        const waktuMs = Math.round(
+          state.fase_mulai
+            ? Math.max(0, Math.min(durasiMs, sekarang() - new Date(state.fase_mulai).getTime()))
+            : durasiMs,
+        )
 
         // Kecepatan tidak menambah saldo — hanya dipakai sebagai penentu urutan
         // saat terjadi seri (lihat src/lib/peringkat.ts).
@@ -261,7 +268,16 @@ export default function Peserta() {
   }
 
   if (!peserta) {
-    return <FormDaftar onDaftar={setPeserta} onGalat={setGalat} galat={galat} />
+    return (
+      <>
+        {versiKedaluwarsa && (
+          <div className="mx-auto w-full max-w-sm px-4 pt-4">
+            <BannerVersi />
+          </div>
+        )}
+        <FormDaftar onDaftar={setPeserta} onGalat={setGalat} galat={galat} />
+      </>
+    )
   }
 
   const sudahCatatPutaranIni = transaksi.some((t) => t.putaran === putaran)
@@ -278,6 +294,7 @@ export default function Peserta() {
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-md px-4 pb-24 pt-4">
+      {versiKedaluwarsa && <BannerVersi />}
       <BadgeStatus peserta={peserta} warna={pilihanWarna?.warna ?? null} />
       <BadgeKoneksi status={koneksi} />
 

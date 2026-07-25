@@ -24,6 +24,8 @@ import SpinWheel from '../components/SpinWheel'
 import TimerRing from '../components/TimerRing'
 import EditorSoal from '../components/EditorSoal'
 import PapanSkorPutaran from '../components/PapanSkorPutaran'
+import BannerVersi from '../components/BannerVersi'
+import { useVersiKedaluwarsa } from '../lib/versi'
 import Dashboard, { type DataDashboard } from '../components/Dashboard'
 
 const KUNCI_PIN = 'juragan-terkaya:fasilitator'
@@ -46,6 +48,7 @@ export default function Fasilitator() {
 
 function PanelFasilitator() {
   const { state } = useGameState()
+  const versiKedaluwarsa = useVersiKedaluwarsa()
 
   const [soal, setSoal] = useState<Soal[]>([])
   const [data, setData] = useState<DataDashboard>({
@@ -252,6 +255,8 @@ function PanelFasilitator() {
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-6xl px-4 py-5">
+      {versiKedaluwarsa && <BannerVersi />}
+
       {/* Header */}
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
