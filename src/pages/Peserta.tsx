@@ -3,15 +3,17 @@ import {
   ambilJawabanSaya,
   ambilPeserta,
   ambilPilihanWarnaSaya,
+  ambilSemuaJawaban,
+  ambilSemuaPeserta,
   ambilSoalById,
   ambilTransaksiSaya,
   daftarPeserta,
   simpanJawaban,
   simpanPilihanWarna,
   simpanTransaksi,
-  ubahSaldo,
 } from '../lib/api'
 import {
+  BONUS_KECEPATAN_MAKS,
   DAFTAR_WARNA,
   DENDA,
   DURASI_PILIH_WARNA,
@@ -21,6 +23,8 @@ import {
   SUKARELA_MEMPENGARUHI_SALDO,
   WARNA_META,
 } from '../lib/config'
+import { sekarang } from '../lib/waktu'
+import PapanSkorPutaran from '../components/PapanSkorPutaran'
 import {
   bacaIdPeserta,
   simpanIdPeserta,
@@ -45,7 +49,12 @@ export default function Peserta() {
   const [transaksi, setTransaksi] = useState<Transaksi[]>([])
   const [mengirim, setMengirim] = useState(false)
 
+  // Dimuat hanya saat fase papan skor — tidak perlu dibawa sepanjang permainan.
+  const [semuaPeserta, setSemuaPeserta] = useState<TPeserta[]>([])
+  const [jawabanPutaran, setJawabanPutaran] = useState<JawabanPeserta[]>([])
+
   const putaran = state?.putaran ?? 0
+  const fase = state?.fase
   const wajib = Boolean(state?.warna_spin && pilihanWarna?.warna === state.warna_spin)
 
   const sisaWarna = useSisaWaktu(
@@ -136,6 +145,29 @@ export default function Peserta() {
     muatTransaksi()
   }, [muatTransaksi, putaran])
 
+  // ── Segarkan saldo begitu fasilitator membukukan hasil putaran ──────
+  useEffect(() => {
+    if (fase === 'reveal' || fase === 'skor' || fase === 'selesai') muatPeserta()
+  }, [fase, muatPeserta])
+
+  // ── Muat data papan skor ─────────────────────────────────────────────
+  useEffect(() => {
+    if (fase !== 'skor' && fase !== 'selesai') return
+    let aktif = true
+    Promise.all([ambilSemuaPeserta(), ambilSemuaJawaban()])
+      .then(([daftarPeserta, daftarJawaban]) => {
+        if (!aktif) return
+        setSemuaPeserta(daftarPeserta)
+        setJawabanPutaran(daftarJawaban.filter((j) => j.putaran === putaran))
+      })
+      .catch(() => {
+        /* papan skor bukan data kritis — diamkan bila gagal */
+      })
+    return () => {
+      aktif = false
+    }
+  }, [fase, putaran])
+
   // ── Aksi: pilih warna ────────────────────────────────────────────────
   const pilihWarna = useCallback(
     async (warna: Warna, otomatis = false) => {
@@ -170,16 +202,31 @@ export default function Peserta() {
         const benar = pilihan !== null && pilihan === soal.jawaban
         const berpengaruh = wajib || SUKARELA_MEMPENGARUHI_SALDO
 
+        // Lama menjawab dihitung dari jam server agar adil lintas perangkat.
+        const durasiMs = DURASI_SOAL * 1000
+        const waktuMs = state.fase_mulai
+          ? Math.max(0, Math.min(durasiMs, sekarang() - new Date(state.fase_mulai).getTime()))
+          : durasiMs
+
+        // Bonus kecepatan ala Kahoot: makin cepat menjawab benar, makin besar.
+        const sisaRasio = (durasiMs - waktuMs) / durasiMs
+        const bonus =
+          benar && berpengaruh && BONUS_KECEPATAN_MAKS > 0
+            ? Math.round((BONUS_KECEPATAN_MAKS * sisaRasio) / 10_000) * 10_000
+            : 0
+
         let delta = 0
         if (berpengaruh) {
           if (benar) {
-            delta = soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
+            const efekSoal =
+              soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
+            delta = efekSoal + bonus
           } else {
             delta = -DENDA
           }
         }
 
-        const record = {
+        await simpanJawaban({
           peserta_id: peserta.id,
           putaran: state.putaran,
           soal_id: soal.id,
@@ -187,18 +234,14 @@ export default function Peserta() {
           benar,
           wajib,
           delta_saldo: delta,
-        }
-        await simpanJawaban(record)
+          waktu_jawab_ms: pilihan === null ? null : waktuMs,
+          diterapkan: false,
+        })
 
-        // Pastikan saldo hanya berubah sekali walau ada percobaan ganda.
-        const tersimpan = await ambilJawabanSaya(peserta.id, state.putaran)
-        setJawaban(tersimpan)
-
-        if (tersimpan && tersimpan.delta_saldo !== 0) {
-          const saldoBaru = peserta.saldo + tersimpan.delta_saldo
-          await ubahSaldo(peserta.id, saldoBaru)
-          setPeserta({ ...peserta, saldo: saldoBaru })
-        }
+        // Saldo TIDAK diubah di sini. Perubahan saldo dibukukan serentak oleh
+        // fasilitator saat reveal, supaya peserta tidak bisa menebak benar/salah
+        // dari saldonya yang berubah lebih dulu.
+        setJawaban(await ambilJawabanSaya(peserta.id, state.putaran))
       } catch (e) {
         setGalat(e instanceof Error ? e.message : String(e))
       } finally {
@@ -228,8 +271,16 @@ export default function Peserta() {
   }
 
   const sudahCatatPutaranIni = transaksi.some((t) => t.putaran === putaran)
+  // Form catatan baru boleh muncul setelah jawaban dibuka — kemunculannya sendiri
+  // sudah menandakan jawaban peserta benar.
+  const hasilTerbuka = fase === 'reveal' || fase === 'skor' || fase === 'selesai'
   const perluCatat =
-    wajib && jawaban?.benar === true && soal !== null && soal.efek !== 'netral' && !sudahCatatPutaranIni
+    hasilTerbuka &&
+    wajib &&
+    jawaban?.benar === true &&
+    soal !== null &&
+    soal.efek !== 'netral' &&
+    !sudahCatatPutaranIni
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-md px-4 pb-24 pt-4">
@@ -249,10 +300,18 @@ export default function Peserta() {
       )}
 
       {state?.fase === 'selesai' && (
-        <KartuInfo emoji="🏁" judul="Game selesai!">
-          Saldo akhirmu <b className="text-amber-400">{rupiah(peserta.saldo)}</b>. Lihat papan skor
-          di layar fasilitator.
-        </KartuInfo>
+        <div className="space-y-4">
+          <KartuInfo emoji="🏁" judul="Game selesai!">
+            Saldo akhirmu <b className="text-amber-400">{rupiah(peserta.saldo)}</b>
+          </KartuInfo>
+          <PapanSkorPutaran
+            putaran={putaran}
+            jawaban={jawabanPutaran}
+            peserta={semuaPeserta}
+            sorotPesertaId={peserta.id}
+            sembunyikanPodium
+          />
+        </div>
       )}
 
       {state?.berjalan && state.fase === 'pilih_warna' && (
@@ -289,6 +348,16 @@ export default function Peserta() {
           mengirim={mengirim}
           faseReveal={state.fase === 'reveal'}
           onJawab={kirimJawaban}
+        />
+      )}
+
+      {state?.berjalan && state.fase === 'skor' && (
+        <PapanSkorPutaran
+          putaran={putaran}
+          jawaban={jawabanPutaran}
+          peserta={semuaPeserta}
+          sorotPesertaId={peserta.id}
+          maksBaris={10}
         />
       )}
 
@@ -540,7 +609,9 @@ function FaseSoal({
   onJawab: (p: Pilihan) => void
 }) {
   const efek = EFEK_META[soal.efek]
-  const selesai = jawaban !== null || faseReveal
+  /** Hasil hanya boleh terlihat setelah fasilitator menekan "Reveal Jawaban". */
+  const terbuka = faseReveal
+  const sudahJawab = jawaban !== null
   const habis = sisa === 0
 
   return (
@@ -602,7 +673,7 @@ function FaseSoal({
         <div className="mb-3 flex items-start justify-between gap-3">
           {/* Jenis efek baru boleh terlihat setelah jawaban dibuka — sebelum itu
               badge ini membocorkan arah jawaban yang benar. */}
-          {selesai ? (
+          {terbuka ? (
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${efek.kelas}`}>
               {efek.emoji} {efek.label}
             </span>
@@ -611,7 +682,7 @@ function FaseSoal({
               ❓ Kasus keuangan
             </span>
           )}
-          {!selesai && !habis && <TimerRing sisa={sisa} total={DURASI_SOAL} ukuran={64} />}
+          {!sudahJawab && !habis && <TimerRing sisa={sisa} total={DURASI_SOAL} ukuran={64} />}
         </div>
 
         <p className="text-[15px] leading-relaxed text-slate-100">{soal.teks}</p>
@@ -623,37 +694,65 @@ function FaseSoal({
             const iniPilihanSaya = jawaban?.pilihan === label
 
             let gaya = 'border-slate-600 bg-slate-900 hover:border-amber-400'
-            if (selesai) {
+            if (terbuka) {
+              // Fasilitator sudah membuka jawaban — tampilkan benar/salah.
               if (iniJawabanBenar) gaya = 'border-green-500 bg-green-500/15'
               else if (iniPilihanSaya) gaya = 'border-red-500 bg-red-500/15'
               else gaya = 'border-slate-700 bg-slate-900 opacity-50'
+            } else if (sudahJawab) {
+              // Sudah menjawab tapi belum dibuka — tandai pilihan sendiri saja,
+              // tanpa memberi petunjuk benar atau salah.
+              gaya = iniPilihanSaya
+                ? 'border-amber-400 bg-amber-500/10'
+                : 'border-slate-700 bg-slate-900 opacity-40'
             }
 
             return (
               <button
                 key={label}
                 onClick={() => onJawab(label)}
-                disabled={selesai || mengirim || habis}
+                disabled={sudahJawab || mengirim || habis}
                 className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm text-slate-100 transition disabled:cursor-default ${gaya}`}
               >
                 <span className="mt-px shrink-0 rounded-md bg-slate-700 px-2 py-0.5 text-xs font-bold">
                   {label}
                 </span>
                 <span className="flex-1">{teks}</span>
-                {selesai && iniJawabanBenar && <span>✅</span>}
-                {selesai && iniPilihanSaya && !iniJawabanBenar && <span>❌</span>}
+                {terbuka && iniJawabanBenar && <span>✅</span>}
+                {terbuka && iniPilihanSaya && !iniJawabanBenar && <span>❌</span>}
+                {!terbuka && iniPilihanSaya && <span className="text-amber-400">📌</span>}
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* Hasil */}
-      {jawaban && <HasilJawaban jawaban={jawaban} soal={soal} />}
+      {/* Hasil — hanya setelah fasilitator membuka jawaban */}
+      {terbuka && jawaban && <HasilJawaban jawaban={jawaban} soal={soal} />}
 
-      {!jawaban && habis && !wajib && (
+      {!terbuka && sudahJawab && (
+        <div className="rounded-2xl border border-slate-600 bg-slate-800/60 p-4 text-center">
+          <p className="font-semibold text-slate-100">✅ Jawaban terkirim</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Menunggu fasilitator membuka jawaban…
+            {jawaban.waktu_jawab_ms !== null && (
+              <>
+                <br />
+                <span className="text-xs">
+                  Waktumu {(jawaban.waktu_jawab_ms / 1000).toFixed(1)} detik — makin cepat, makin
+                  besar bonusnya.
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {!sudahJawab && habis && (
         <p className="text-center text-sm text-slate-400">
-          Waktu habis. Kamu tidak ikut menjawab, saldomu tidak berubah.
+          {wajib
+            ? 'Waktu habis. Menunggu fasilitator membuka jawaban…'
+            : 'Waktu habis. Kamu tidak ikut menjawab, saldomu tidak berubah.'}
         </p>
       )}
     </div>

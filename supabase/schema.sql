@@ -46,15 +46,20 @@ create table if not exists pilihan_warna (
 
 -- Jawaban peserta per putaran.
 create table if not exists jawaban (
-  id           bigserial primary key,
-  peserta_id   uuid    not null references peserta(id) on delete cascade,
-  putaran      int     not null,
-  soal_id      int     not null,
-  pilihan      text,                        -- null = tidak menjawab (timeout)
-  benar        boolean not null default false,
-  wajib        boolean not null default false,
-  delta_saldo  bigint  not null default 0,
-  created_at   timestamptz not null default now(),
+  id             bigserial primary key,
+  peserta_id     uuid    not null references peserta(id) on delete cascade,
+  putaran        int     not null,
+  soal_id        int     not null,
+  pilihan        text,                      -- null = tidak menjawab (timeout)
+  benar          boolean not null default false,
+  wajib          boolean not null default false,
+  delta_saldo    bigint  not null default 0,
+  -- Lama menjawab sejak soal tampil; dipakai menentukan pemenang tercepat.
+  waktu_jawab_ms int,
+  -- delta_saldo baru dibukukan saat fasilitator reveal, agar peserta tidak
+  -- bisa menebak benar/salah dari saldonya yang berubah duluan.
+  diterapkan     boolean not null default false,
+  created_at     timestamptz not null default now(),
   unique (peserta_id, putaran)
 );
 
@@ -177,6 +182,34 @@ end;
 $$;
 
 grant execute on function reset_game() to anon, authenticated;
+
+
+-- ──────────────── PEMBUKUAN SALDO SAAT REVEAL ────────────────
+-- Menerapkan seluruh perubahan saldo satu putaran sekaligus dalam satu query,
+-- dipanggil fasilitator saat menekan "Reveal Jawaban".
+
+create or replace function terapkan_saldo_putaran(p_putaran int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update peserta p
+     set saldo = p.saldo + j.delta_saldo
+    from jawaban j
+   where j.peserta_id = p.id
+     and j.putaran    = p_putaran
+     and j.diterapkan = false;
+
+  update jawaban
+     set diterapkan = true
+   where putaran = p_putaran
+     and diterapkan = false;
+end;
+$$;
+
+grant execute on function terapkan_saldo_putaran(int) to anon, authenticated;
 
 
 -- ─────────────────── WAKTU SERVER (sinkronisasi timer) ───────────────────

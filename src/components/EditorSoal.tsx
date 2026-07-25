@@ -5,15 +5,36 @@ import type { Efek, Pilihan, Soal, Warna } from '../lib/types'
 
 interface Props {
   soalAwal: Soal[]
-  onSimpanSemua: (daftar: Soal[]) => Promise<void>
+  onSimpanSemua: (daftar: Soal[], idDihapus: number[]) => Promise<void>
   onTutup: () => void
 }
 
 export default function EditorSoal({ soalAwal, onSimpanSemua, onTutup }: Props) {
   const [daftar, setDaftar] = useState<Soal[]>(soalAwal)
+  const [idDihapus, setIdDihapus] = useState<number[]>([])
   const [indeksEdit, setIndeksEdit] = useState<number | null>(null)
   const [menyimpan, setMenyimpan] = useState(false)
   const [galat, setGalat] = useState<string | null>(null)
+
+  const [cari, setCari] = useState('')
+  const [filterWarna, setFilterWarna] = useState<Warna | 'semua'>('semua')
+
+  /** Simpan indeks asli agar penyuntingan tetap benar walau daftar sedang difilter. */
+  const terlihat = daftar
+    .map((soal, indeks) => ({ soal, indeks }))
+    .filter(({ soal }) => {
+      if (filterWarna !== 'semua' && soal.warna !== filterWarna) return false
+      const kunci = cari.trim().toLowerCase()
+      if (!kunci) return true
+      return (
+        String(soal.id) === kunci ||
+        soal.teks.toLowerCase().includes(kunci) ||
+        soal.insight.toLowerCase().includes(kunci) ||
+        soal.opsi.some((o) => o.toLowerCase().includes(kunci))
+      )
+    })
+
+  const idBerikutnya = () => daftar.reduce((m, s) => Math.max(m, s.id), 0) + 1
 
   function simpanSatu(soal: Soal) {
     setDaftar((d) => d.map((s, i) => (i === indeksEdit ? soal : s)))
@@ -21,10 +42,9 @@ export default function EditorSoal({ soalAwal, onSimpanSemua, onTutup }: Props) 
   }
 
   function tambahSoal() {
-    const idBaru = daftar.reduce((m, s) => Math.max(m, s.id), 0) + 1
     const baru: Soal = {
-      id: idBaru,
-      warna: 'merah',
+      id: idBerikutnya(),
+      warna: filterWarna === 'semua' ? 'merah' : filterWarna,
       teks: '',
       opsi: ['', '', ''],
       jawaban: 'A',
@@ -36,16 +56,44 @@ export default function EditorSoal({ soalAwal, onSimpanSemua, onTutup }: Props) 
     setIndeksEdit(daftar.length)
   }
 
+  function duplikatSoal(indeks: number) {
+    const asli = daftar[indeks]
+    const salinan: Soal = { ...asli, id: idBerikutnya(), opsi: [...asli.opsi] }
+    setDaftar((d) => [...d, salinan])
+    setIndeksEdit(daftar.length)
+  }
+
+  function hapusSatu(indeks: number) {
+    const soal = daftar[indeks]
+    const cuplikan = soal.teks.slice(0, 60) || `Soal #${soal.id}`
+    if (!confirm(`Hapus soal ini?\n\n"${cuplikan}"\n\nPenghapusan berlaku setelah kamu menekan Simpan Semua.`))
+      return
+    setDaftar((d) => d.filter((_, i) => i !== indeks))
+    setIdDihapus((ids) => [...ids, soal.id])
+  }
+
   async function simpanSemua() {
     const kosong = daftar.find((s) => !s.teks.trim() || s.opsi.some((o) => !o.trim()))
     if (kosong) {
       setGalat(`Soal #${kosong.id} masih ada bagian yang kosong. Lengkapi dulu sebelum menyimpan.`)
       return
     }
+
+    // Setiap warna wajib punya minimal 1 soal, kalau tidak roda bisa berhenti
+    // di warna yang tidak punya soal sama sekali.
+    const warnaKosong = DAFTAR_WARNA.filter((w) => !daftar.some((s) => s.warna === w))
+    if (warnaKosong.length > 0) {
+      setGalat(
+        `Warna ${warnaKosong.map((w) => WARNA_META[w].label).join(', ')} belum punya soal. ` +
+          `Roda bisa berhenti di warna itu dan game akan tersendat.`,
+      )
+      return
+    }
+
     setMenyimpan(true)
     setGalat(null)
     try {
-      await onSimpanSemua(daftar)
+      await onSimpanSemua(daftar, idDihapus)
       onTutup()
     } catch (e) {
       setGalat(e instanceof Error ? e.message : String(e))
@@ -78,34 +126,89 @@ export default function EditorSoal({ soalAwal, onSimpanSemua, onTutup }: Props) 
 
         {indeksEdit === null ? (
           <>
-            <div className="max-h-[60vh] space-y-2 overflow-y-auto p-5">
-              {daftar.map((s, i) => (
-                <button
-                  key={s.id}
-                  onClick={() => setIndeksEdit(i)}
-                  className="flex w-full items-start gap-3 rounded-xl border border-slate-700 bg-slate-800/50 px-3 py-2.5 text-left transition hover:border-amber-400"
-                >
-                  <span className="mt-0.5 text-lg">{WARNA_META[s.warna].emoji}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-slate-100">
-                      {s.teks || <i className="text-slate-500">(belum diisi)</i>}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] text-slate-400">
-                      #{s.id} · {EFEK_META[s.efek].emoji} {EFEK_META[s.efek].label}
-                      {s.efek !== 'netral' && ` ${rupiah(s.nominal)}`} · Jawaban {s.jawaban}
-                    </span>
-                  </span>
-                </button>
-              ))}
+            {/* Pencarian & filter warna */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-700 px-5 py-3">
+              <input
+                value={cari}
+                onChange={(e) => setCari(e.target.value)}
+                placeholder="Cari teks soal, opsi, insight, atau nomor…"
+                className="min-w-[180px] flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-400"
+              />
+              <select
+                value={filterWarna}
+                onChange={(e) => setFilterWarna(e.target.value as Warna | 'semua')}
+                className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-400"
+              >
+                <option value="semua">Semua warna</option>
+                {DAFTAR_WARNA.map((w) => (
+                  <option key={w} value={w}>
+                    {WARNA_META[w].emoji} {WARNA_META[w].label} (
+                    {daftar.filter((s) => s.warna === w).length})
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="flex flex-wrap gap-3 border-t border-slate-700 px-5 py-4">
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto p-5">
+              {terlihat.length === 0 ? (
+                <p className="py-10 text-center text-sm text-slate-400">
+                  Tidak ada soal yang cocok dengan pencarian.
+                </p>
+              ) : (
+                terlihat.map(({ soal: s, indeks }) => (
+                  <div
+                    key={s.id}
+                    className="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-800/50 pr-2 transition hover:border-amber-400"
+                  >
+                    <button
+                      onClick={() => setIndeksEdit(indeks)}
+                      className="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 text-left"
+                    >
+                      <span className="mt-0.5 text-lg">{WARNA_META[s.warna].emoji}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-slate-100">
+                          {s.teks || <i className="text-slate-500">(belum diisi)</i>}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-slate-400">
+                          #{s.id} · {EFEK_META[s.efek].emoji} {EFEK_META[s.efek].label}
+                          {s.efek !== 'netral' && ` ${rupiah(s.nominal)}`} · Jawaban {s.jawaban}
+                        </span>
+                      </span>
+                    </button>
+
+                    <div className="flex shrink-0 gap-1 py-2.5">
+                      <button
+                        onClick={() => duplikatSoal(indeks)}
+                        title="Duplikat soal ini"
+                        className="rounded-md px-2 py-1 text-sm text-slate-400 transition hover:bg-slate-700 hover:text-slate-100"
+                      >
+                        ⧉
+                      </button>
+                      <button
+                        onClick={() => hapusSatu(indeks)}
+                        title="Hapus soal ini"
+                        className="rounded-md px-2 py-1 text-sm text-slate-400 transition hover:bg-red-500/20 hover:text-red-400"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 border-t border-slate-700 px-5 py-4">
               <button
                 onClick={tambahSoal}
                 className="rounded-xl border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
               >
                 ➕ Tambah Soal
               </button>
+
+              {idDihapus.length > 0 && (
+                <span className="text-xs text-red-400">{idDihapus.length} soal akan dihapus</span>
+              )}
+
               <button
                 onClick={simpanSemua}
                 disabled={menyimpan}

@@ -12,9 +12,17 @@ export type Pilihan = 'A' | 'B' | 'C'
  * - spin        : fasilitator memutar roda, peserta menunggu
  * - soal        : soal aktif, peserta menjawab (30 detik)
  * - reveal      : jawaban benar sudah dibuka fasilitator
+ * - skor        : papan pemenang putaran + peringkat kumulatif, sebelum lanjut
  * - selesai     : game berakhir, tampilkan papan skor final
  */
-export type Fase = 'menunggu' | 'pilih_warna' | 'spin' | 'soal' | 'reveal' | 'selesai'
+export type Fase =
+  | 'menunggu'
+  | 'pilih_warna'
+  | 'spin'
+  | 'soal'
+  | 'reveal'
+  | 'skor'
+  | 'selesai'
 
 export interface Soal {
   id: number
@@ -69,6 +77,10 @@ export interface JawabanPeserta {
   /** true = warna peserta cocok dengan hasil spin (wajib jawab); false = ikut sukarela. */
   wajib: boolean
   delta_saldo: number
+  /** Lama menjawab (ms) sejak soal tampil. null untuk timeout. Penentu pemenang tercepat. */
+  waktu_jawab_ms: number | null
+  /** true jika delta_saldo sudah dibukukan ke saldo peserta (terjadi saat reveal). */
+  diterapkan: boolean
   created_at: string
 }
 

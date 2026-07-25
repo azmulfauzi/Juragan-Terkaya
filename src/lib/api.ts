@@ -30,6 +30,16 @@ export async function ubahGameState(patch: Partial<GameState>): Promise<void> {
   if (error) throw new Error(`Gagal memperbarui status game: ${error.message}`)
 }
 
+/**
+ * Membukukan seluruh perubahan saldo satu putaran sekaligus.
+ * Dipanggil saat fasilitator menekan "Reveal Jawaban" — sampai saat itu saldo
+ * peserta sengaja dibiarkan tetap agar tidak membocorkan benar/salah.
+ */
+export async function terapkanSaldoPutaran(putaran: number): Promise<void> {
+  const { error } = await supabase.rpc('terapkan_saldo_putaran', { p_putaran: putaran })
+  if (error) throw new Error(`Gagal membukukan saldo putaran: ${error.message}`)
+}
+
 export async function resetGame(): Promise<void> {
   const { error } = await supabase.rpc('reset_game')
   if (error) throw new Error(`Gagal mereset game: ${error.message}`)
