@@ -104,7 +104,7 @@ export default function PapanSkorPutaran({
                       {detik(j.waktu_jawab_ms)}
                     </span>
                     <span className="block text-[11px] tabular-nums text-slate-400">
-                      {selisih(j.delta_saldo)}
+                      {j.wajib ? selisih(j.delta_saldo) : 'tanpa saldo'}
                     </span>
                   </span>
                 </li>

@@ -28,14 +28,17 @@ export const RIWAYAT_SOAL_MAX = 20
  * Apakah jawaban peserta SUKARELA (warnanya tidak cocok dengan hasil spin)
  * ikut mempengaruhi saldo?
  *
- *  true  = ikut berpengaruh — benar dapat efek soal, salah kena denda.
- *          Ada risiko & imbalan, jadi peserta terdorong ikut menjawab.
- *  false = hanya dicatat untuk rekap fasilitator, saldo tidak berubah.
+ * Disetel `false`: peserta yang warnanya tidak keluar boleh ikut menjawab untuk
+ * latihan dan keseruan, tapi jawabannya sama sekali tidak mengubah saldo — baik
+ * benar maupun salah — dan tidak mengisi catatan transaksi. Hanya peserta yang
+ * warnanya cocok dengan hasil spin yang "bermain uang" pada putaran itu.
  *
- * Peserta sukarela TIDAK PERNAH kena denda kalau diam saja sampai waktu habis,
- * dan tidak pernah mengisi form catatan transaksi (keduanya khusus peserta wajib).
+ * Jawabannya tetap disimpan untuk rekap fasilitator dan tetap diperhitungkan
+ * pada podium tercepat serta rata-rata waktu penentu seri.
+ *
+ * Ubah ke `true` bila ingin sukarela ikut menanggung risiko dan imbalan.
  */
-export const SUKARELA_MEMPENGARUHI_SALDO = true
+export const SUKARELA_MEMPENGARUHI_SALDO = false
 
 /** PIN akses halaman fasilitator. Ubah lewat file .env (VITE_FASILITATOR_PIN). */
 export const FASILITATOR_PIN = import.meta.env.VITE_FASILITATOR_PIN || '2024'

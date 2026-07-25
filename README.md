@@ -38,6 +38,10 @@ npm install
 Skrip itu membuat semua tabel, mengaktifkan realtime, dan menyiapkan fungsi reset.
 Aman dijalankan berulang kali.
 
+> Untuk database yang **sudah terlanjur dibuat** dengan skema lama, jalankan juga
+> [`supabase/migrasi-02-kecepatan.sql`](supabase/migrasi-02-kecepatan.sql).
+> Database baru tidak perlu — `schema.sql` sudah mencakupnya.
+
 ### 3. Isi kredensial
 
 Salin `.env.example` menjadi `.env`, lalu isi dari **Project Settings → Data API**:
@@ -74,14 +78,31 @@ Alur satu putaran:
 1. Fasilitator klik **Mulai Game** → peserta punya 10 detik memilih 1 dari 4 warna
    (yang tidak sempat memilih akan dipilihkan sistem secara acak)
 2. Fasilitator klik **Putar Roda** → roda berhenti di satu warna
-3. Sistem mengambil 1 soal acak berwarna itu. Peserta yang warnanya cocok **wajib**
-   menjawab dalam 30 detik; peserta lain **boleh ikut** menjawab
-4. Jawaban benar mengubah saldo sesuai efek soal; salah atau telat kena denda
-5. Peserta wajib yang menjawab benar mengisi **form catatan transaksi**
-6. Fasilitator klik **Reveal Jawaban** lalu **Tampilkan Insight**
-7. Klik **Putaran Berikutnya**, atau **Akhiri Game** untuk menutup sesi
+3. Sistem mengambil 1 soal acak berwarna itu, lalu peserta punya 30 detik:
+   - Warna **cocok** dengan hasil spin → **wajib** menjawab, saldo dipertaruhkan
+   - Warna **tidak cocok** → **boleh ikut** menjawab untuk latihan, saldo tidak
+     berubah sama sekali dan tidak mengisi catatan transaksi
+4. Fasilitator memantau progress: siapa sudah menjawab, siapa belum, berapa detik.
+   Benar/salah masih tersembunyi — aman kalau layar di-share
+5. Fasilitator klik **Reveal Jawaban** → saat inilah saldo seluruh peserta
+   dibukukan serentak, dan peserta baru tahu benar/salah
+6. Fasilitator klik **Tampilkan Insight** untuk membahas pelajarannya
+7. Peserta wajib yang menjawab benar mengisi **form catatan transaksi**
+8. Fasilitator klik **Putaran Berikutnya** → muncul **podium tercepat** putaran itu
+   dan **peringkat kumulatif**, di layar fasilitator maupun HP peserta
+9. Klik **Mulai Putaran berikutnya**, atau **Akhiri Game** untuk menutup sesi
 
 Jumlah putaran tidak dibatasi — fasilitator yang menentukan kapan berhenti.
+
+> **Penting:** menekan **Reveal Jawaban** tidak boleh dilewat. Saldo peserta baru
+> dibukukan pada langkah itu — kalau dilewati, papan skor tidak bergerak.
+
+### Penentuan pemenang
+
+- **Podium putaran** — di antara peserta yang sama-sama menjawab **benar**, yang
+  **tercepat** menang. Peserta sukarela ikut diperhitungkan di podium.
+- **Peringkat akhir** — saldo tertinggi. Bila saldo **seri**, yang **rata-rata waktu
+  menjawabnya lebih cepat** berada di atas. Kecepatan tidak pernah menambah uang.
 
 ---
 
@@ -96,7 +117,7 @@ Semua ada di [`src/lib/config.ts`](src/lib/config.ts):
 | `DURASI_PILIH_WARNA` | `10` detik | Waktu memilih warna |
 | `DURASI_SOAL` | `30` detik | Waktu menjawab soal |
 | `RIWAYAT_SOAL_MAX` | `20` | Berapa soal terakhir dihindari agar tidak berulang |
-| `SUKARELA_MEMPENGARUHI_SALDO` | `true` | Apakah jawaban sukarela ikut mengubah saldo |
+| `SUKARELA_MEMPENGARUHI_SALDO` | `false` | Apakah jawaban sukarela ikut mengubah saldo |
 
 PIN fasilitator diatur lewat `VITE_FASILITATOR_PIN` di `.env`.
 

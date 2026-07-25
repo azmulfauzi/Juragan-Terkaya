@@ -646,18 +646,22 @@ function FaseSoal({
           ) : (
             <>
               <p className="text-sm">
-                Warnamu{' '}
                 {warnaSaya ? (
-                  <b className={WARNA_META[warnaSaya].teks}>
-                    {WARNA_META[warnaSaya].emoji} {WARNA_META[warnaSaya].label}
-                  </b>
+                  <>
+                    Warnamu{' '}
+                    <b className={WARNA_META[warnaSaya].teks}>
+                      {WARNA_META[warnaSaya].emoji} {WARNA_META[warnaSaya].label}
+                    </b>{' '}
+                    — boleh ikut jawab
+                  </>
                 ) : (
-                  '—'
-                )}{' '}
-                — boleh ikut jawab
+                  'Kamu belum memilih warna — boleh ikut jawab'
+                )}
               </p>
               <p className="mt-0.5 text-xs opacity-70">
-                Tidak wajib. Diam saja aman, tapi jawaban benar menambah saldomu.
+                {warnaSaya
+                  ? 'Warnamu tidak keluar, jadi jawabanmu tidak mengubah saldo. Ikut menjawab untuk latihan — tanpa risiko denda.'
+                  : 'Kamu bergabung setelah pemilihan warna ditutup. Jawabanmu tidak mengubah saldo — ikut saja untuk latihan.'}
               </p>
             </>
           )}
@@ -678,7 +682,11 @@ function FaseSoal({
               ❓ Kasus keuangan
             </span>
           )}
-          {!sudahJawab && !habis && <TimerRing sisa={sisa} total={DURASI_SOAL} ukuran={64} />}
+          {/* Timer hanya relevan selama fase menjawab. Setelah dibuka, fase_mulai
+              sudah tidak dipakai sehingga angkanya akan menyesatkan. */}
+          {!sudahJawab && !habis && !terbuka && (
+            <TimerRing sisa={sisa} total={DURASI_SOAL} ukuran={64} />
+          )}
         </div>
 
         <p className="text-[15px] leading-relaxed text-slate-100">{soal.teks}</p>
@@ -707,7 +715,7 @@ function FaseSoal({
               <button
                 key={label}
                 onClick={() => onJawab(label)}
-                disabled={sudahJawab || mengirim || habis}
+                disabled={sudahJawab || mengirim || habis || terbuka}
                 className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm text-slate-100 transition disabled:cursor-default ${gaya}`}
               >
                 <span className="mt-px shrink-0 rounded-md bg-slate-700 px-2 py-0.5 text-xs font-bold">
@@ -756,27 +764,41 @@ function FaseSoal({
 }
 
 function HasilJawaban({ jawaban, soal }: { jawaban: JawabanPeserta; soal: Soal }) {
+  // Peserta sukarela (warnanya tidak keluar di spin) tidak pernah terpengaruh
+  // saldonya, baik jawabannya benar maupun salah.
+  const catatanSukarela = 'Warnamu tidak keluar di putaran ini, jadi saldomu tidak berubah.'
+
   if (jawaban.benar) {
     return (
       <div className="rounded-2xl border border-green-500/40 bg-green-500/10 p-4 text-center">
         <p className="font-bold text-green-400">✅ Jawaban benar!</p>
         <p className="mt-1 text-sm text-slate-300">
-          {soal.efek === 'netral'
-            ? 'Soal diskusi — saldo tidak berubah.'
-            : `Saldo ${soal.efek === 'masuk' ? 'bertambah' : 'berkurang'} ${rupiah(soal.nominal)}.`}
+          {!jawaban.wajib
+            ? catatanSukarela
+            : soal.efek === 'netral'
+              ? 'Soal diskusi — saldo tidak berubah.'
+              : `Saldo ${soal.efek === 'masuk' ? 'bertambah' : 'berkurang'} ${rupiah(soal.nominal)}.`}
         </p>
+        {!jawaban.wajib && (
+          <p className="mt-1 text-xs text-slate-500">
+            Tetap dihitung untuk podium tercepat putaran ini.
+          </p>
+        )}
       </div>
     )
   }
+
   return (
     <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-center">
       <p className="font-bold text-red-400">
         {jawaban.pilihan === null ? '⏰ Waktu habis!' : '❌ Jawaban salah'}
       </p>
       <p className="mt-1 text-sm text-slate-300">
-        {jawaban.delta_saldo === 0
-          ? 'Saldomu tidak berubah.'
-          : `Saldo dikurangi denda ${rupiah(DENDA)}.`}
+        {!jawaban.wajib
+          ? catatanSukarela
+          : jawaban.delta_saldo === 0
+            ? 'Saldomu tidak berubah.'
+            : `Saldo dikurangi denda ${rupiah(DENDA)}.`}
       </p>
     </div>
   )
