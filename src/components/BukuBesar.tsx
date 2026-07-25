@@ -21,9 +21,7 @@ export default function BukuBesar({
 
       {buku.baris.length === 0 ? (
         <p className="py-3 text-center text-xs text-slate-500">
-          {milikSaya
-            ? 'Warnamu belum pernah keluar di spin, jadi saldomu masih utuh.'
-            : 'Belum pernah terpilih sebagai peserta wajib.'}
+          {milikSaya ? 'Kamu belum menjawab satu soal pun.' : 'Belum ada jawaban yang masuk.'}
         </p>
       ) : (
         <div className="my-2 space-y-2 border-y border-slate-700 py-2">
@@ -44,16 +42,17 @@ export default function BukuBesar({
                 <span className="min-w-0 flex-1 text-slate-200">{r.keterangan}</span>
                 <span
                   className={`shrink-0 tabular-nums ${
-                    r.efekNominal === 0
-                      ? 'text-slate-500'
-                      : r.efekNominal > 0
-                        ? 'text-green-400'
-                        : 'text-red-400'
+                    r.perubahan > 0 ? 'text-green-400' : 'text-red-400'
                   }`}
                 >
-                  {r.efekNominal === 0 ? 'tanpa efek kas' : selisih(r.efekNominal)}
+                  {selisih(r.perubahan)}
                 </span>
               </div>
+              {r.soal && r.soal.efek !== 'netral' && (
+                <p className="text-[11px] text-slate-500">
+                  Nilai transaksi {rupiah(r.soal.nominal)} — tidak mempengaruhi saldo
+                </p>
+              )}
             </div>
           ))}
         </div>

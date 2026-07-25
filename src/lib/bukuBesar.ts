@@ -5,8 +5,8 @@ export interface BarisBukuBesar {
   urut: number
   jawaban: JawabanPeserta
   soal: Soal | undefined
-  /** Perubahan kas dari transaksi soal, sebelum bonus/denda. */
-  efekNominal: number
+  /** Bonus (positif) atau denda (negatif) dari jawaban ini. */
+  perubahan: number
   keterangan: string
 }
 
@@ -26,12 +26,12 @@ export interface BukuBesar {
 }
 
 /**
- * Menyusun buku besar satu peserta: modal awal, tiap transaksi yang mengubah
- * saldo, total bonus dan denda, lalu saldo akhir.
+ * Menyusun buku besar satu peserta: modal awal, tiap jawaban beserta bonus atau
+ * dendanya, lalu saldo akhir.
  *
- * Hanya putaran saat peserta berstatus WAJIB yang dihitung — hanya itu yang
- * mempengaruhi saldo. Rinciannya direkonstruksi dari jawaban + bank soal, jadi
- * tetap lengkap walau peserta lupa mengisi form catatan.
+ * Nominal transaksi pada soal TIDAK masuk hitungan — hanya bonus dan denda yang
+ * menggerakkan saldo. Nominalnya tetap ditampilkan sebagai konteks agar peserta
+ * mengingat transaksi apa yang sedang dibahas.
  */
 export function hitungBukuBesar(
   peserta: Peserta,
@@ -41,8 +41,8 @@ export function hitungBukuBesar(
 ): BukuBesar {
   const soalPeta = new Map(soal.map((s) => [s.id, s]))
 
-  const jawabanWajib = jawaban
-    .filter((j) => j.peserta_id === peserta.id && j.wajib)
+  const jawabanSaya = jawaban
+    .filter((j) => j.peserta_id === peserta.id)
     .sort((a, b) => a.putaran - b.putaran)
 
   // Keterangan yang diisi sendiri oleh peserta, diindeks per putaran.
@@ -50,32 +50,21 @@ export function hitungBukuBesar(
     transaksi.filter((t) => t.peserta_id === peserta.id).map((t) => [t.putaran, t.keterangan]),
   )
 
-  const baris: BarisBukuBesar[] = jawabanWajib.map((j, i) => {
+  const baris: BarisBukuBesar[] = jawabanSaya.map((j, i) => {
     const s = soalPeta.get(j.soal_id)
-    const efekNominal = !s
-      ? 0
-      : s.efek === 'masuk'
-        ? s.nominal
-        : s.efek === 'keluar'
-          ? -s.nominal
-          : 0
-
     return {
       urut: i + 1,
       jawaban: j,
       soal: s,
-      efekNominal,
+      perubahan: j.benar ? BONUS_BENAR : -DENDA,
       keterangan: keteranganPeserta.get(j.putaran) ?? s?.teks ?? '—',
     }
   })
 
-  const jumlahBenar = jawabanWajib.filter((j) => j.benar).length
-  const jumlahSalah = jawabanWajib.length - jumlahBenar
+  const jumlahBenar = jawabanSaya.filter((j) => j.benar).length
+  const jumlahSalah = jawabanSaya.length - jumlahBenar
   const totalBonus = jumlahBenar * BONUS_BENAR
   const totalDenda = jumlahSalah * DENDA
-
-  const saldoHitung =
-    MODAL_AWAL + baris.reduce((n, r) => n + r.efekNominal, 0) + totalBonus - totalDenda
 
   return {
     baris,
@@ -84,6 +73,6 @@ export function hitungBukuBesar(
     jumlahBenar,
     jumlahSalah,
     saldoAkhir: peserta.saldo,
-    selisihHitung: peserta.saldo - saldoHitung,
+    selisihHitung: peserta.saldo - (MODAL_AWAL + totalBonus - totalDenda),
   }
 }

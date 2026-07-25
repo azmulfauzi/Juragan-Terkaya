@@ -10,25 +10,23 @@ export const DENDA = 500_000
 export const BONUS_BENAR = 1_000_000
 
 /**
- * Rumus perubahan saldo peserta WAJIB:
+ * Rumus perubahan saldo — berlaku sama untuk seluruh peserta:
  *
- *     delta = efek nominal soal + (benar ? +BONUS_BENAR : −DENDA)
+ *     delta = benar ? +BONUS_BENAR : −DENDA
  *
- * Efek nominal berlaku terlepas dari benar atau salah — transaksinya memang
- * terjadi di dunia nyata. Yang membedakan hanyalah bonus atau dendanya.
+ * Nominal dan jenis efek soal TIDAK mempengaruhi saldo. Keduanya tetap ada di
+ * bank soal sebagai bahan pembelajaran (ditampilkan setelah reveal dan mengisi
+ * form catatan transaksi), tapi tidak lagi menggerakkan angka.
  *
- * | Tipe soal   | Benar                 | Salah / tidak menjawab |
- * |-------------|-----------------------|------------------------|
- * | Pemasukan   | +nominal +1.000.000   | +nominal −500.000      |
- * | Pengeluaran | −nominal +1.000.000   | −nominal −500.000      |
- * | Diskusi     |          +1.000.000   |          −500.000      |
+ * Konsekuensinya disengaja: saldo menjadi cerminan langsung dari jumlah jawaban
+ * benar, sehingga peringkat mudah dijelaskan ke peserta dan tidak bisa terbantu
+ * keberuntungan jenis soal yang kebetulan didapat.
  *
- * Peserta sukarela tidak terpengaruh sama sekali (lihat
- * SUKARELA_MEMPENGARUHI_SALDO di bawah).
+ * | Hasil jawaban          | Perubahan saldo |
+ * |------------------------|-----------------|
+ * | Benar                  | +1.000.000      |
+ * | Salah / tidak menjawab |   −500.000      |
  */
-
-/** Durasi fase pilih warna (detik). */
-export const DURASI_PILIH_WARNA = 10
 
 /** Durasi fase menjawab soal (detik). */
 export const DURASI_SOAL = 30
@@ -45,31 +43,19 @@ export const RIWAYAT_SOAL_MAX = 20
  * Logikanya ada di src/lib/peringkat.ts.
  */
 
-/**
- * Apakah jawaban peserta SUKARELA (warnanya tidak cocok dengan hasil spin)
- * ikut mempengaruhi saldo?
- *
- * Disetel `false`: peserta yang warnanya tidak keluar boleh ikut menjawab untuk
- * latihan dan keseruan, tapi jawabannya sama sekali tidak mengubah saldo — baik
- * benar maupun salah — dan tidak mengisi catatan transaksi. Hanya peserta yang
- * warnanya cocok dengan hasil spin yang "bermain uang" pada putaran itu.
- *
- * Jawabannya tetap disimpan untuk rekap fasilitator dan tetap diperhitungkan
- * pada podium tercepat serta rata-rata waktu penentu seri.
- *
- * Ubah ke `true` bila ingin sukarela ikut menanggung risiko dan imbalan.
- */
-export const SUKARELA_MEMPENGARUHI_SALDO = false
-
 /** PIN akses halaman fasilitator. Ubah lewat file .env (VITE_FASILITATOR_PIN). */
 export const FASILITATOR_PIN = import.meta.env.VITE_FASILITATOR_PIN || '2024'
 
+/**
+ * Warna kini hanya berfungsi sebagai label pengelompokan di bank soal, supaya
+ * fasilitator mudah menata dan menyaring soal di editor. Peserta tidak lagi
+ * memilih warna, dan warna tidak mempengaruhi jalannya permainan.
+ */
 export const DAFTAR_WARNA: Warna[] = ['merah', 'kuning', 'hijau', 'biru']
 
 interface WarnaMeta {
   label: string
   emoji: string
-  /** Warna solid untuk segmen roda spin (SVG). */
   hex: string
   /** Kelas Tailwind ditulis lengkap agar tidak hilang saat build. */
   bg: string

@@ -3,7 +3,6 @@ import {
   ambilJawabanPeserta,
   ambilJawabanSaya,
   ambilPeserta,
-  ambilPilihanWarnaSaya,
   ambilSemuaJawaban,
   ambilSemuaPeserta,
   ambilSemuaSoal,
@@ -11,19 +10,14 @@ import {
   ambilTransaksiSaya,
   daftarPeserta,
   simpanJawaban,
-  simpanPilihanWarna,
   simpanTransaksi,
 } from '../lib/api'
 import {
   BONUS_BENAR,
-  DAFTAR_WARNA,
   DENDA,
-  DURASI_PILIH_WARNA,
   DURASI_SOAL,
   EFEK_META,
   MODAL_AWAL,
-  SUKARELA_MEMPENGARUHI_SALDO,
-  WARNA_META,
 } from '../lib/config'
 import { sekarang } from '../lib/waktu'
 import { useVersiKedaluwarsa } from '../lib/versi'
@@ -39,7 +33,7 @@ import {
   type StatusKoneksi,
 } from '../lib/hooks'
 import { LABEL_OPSI, rupiah, selisih } from '../lib/format'
-import type { JawabanPeserta, Peserta as TPeserta, Pilihan, PilihanWarna, Soal, Transaksi, Warna } from '../lib/types'
+import type { JawabanPeserta, Peserta as TPeserta, Pilihan, Soal, Transaksi } from '../lib/types'
 import TimerRing from '../components/TimerRing'
 
 export default function Peserta() {
@@ -50,7 +44,6 @@ export default function Peserta() {
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState<string | null>(null)
 
-  const [pilihanWarna, setPilihanWarna] = useState<PilihanWarna | null>(null)
   const [jawaban, setJawaban] = useState<JawabanPeserta | null>(null)
   const [soal, setSoal] = useState<Soal | null>(null)
   const [transaksi, setTransaksi] = useState<Transaksi[]>([])
@@ -67,12 +60,6 @@ export default function Peserta() {
 
   const putaran = state?.putaran ?? 0
   const fase = state?.fase
-  const wajib = Boolean(state?.warna_spin && pilihanWarna?.warna === state.warna_spin)
-
-  const sisaWarna = useSisaWaktu(
-    state?.fase === 'pilih_warna' ? state.fase_mulai : null,
-    DURASI_PILIH_WARNA,
-  )
   const sisaSoal = useSisaWaktu(state?.fase === 'soal' ? state.fase_mulai : null, DURASI_SOAL)
 
   // ── Muat identitas peserta dari perangkat ──────────────────────────────
@@ -105,23 +92,15 @@ export default function Peserta() {
     return () => clearInterval(timer)
   }, [muatPeserta])
 
-  // ── Muat data putaran berjalan (juga saat peserta refresh di tengah ronde) ──
+  // ── Muat jawaban putaran berjalan (juga saat peserta refresh di tengah ronde) ──
   useEffect(() => {
     if (!peserta || putaran === 0) {
-      setPilihanWarna(null)
       setJawaban(null)
       return
     }
     let aktif = true
-    Promise.all([
-      ambilPilihanWarnaSaya(peserta.id, putaran),
-      ambilJawabanSaya(peserta.id, putaran),
-    ])
-      .then(([w, j]) => {
-        if (!aktif) return
-        setPilihanWarna(w)
-        setJawaban(j)
-      })
+    ambilJawabanSaya(peserta.id, putaran)
+      .then((j) => aktif && setJawaban(j))
       .catch((e) => setGalat(e instanceof Error ? e.message : String(e)))
     return () => {
       aktif = false
@@ -202,31 +181,6 @@ export default function Peserta() {
     }
   }, [fase, putaran])
 
-  // ── Aksi: pilih warna ────────────────────────────────────────────────
-  const pilihWarna = useCallback(
-    async (warna: Warna, otomatis = false) => {
-      if (!peserta || !state || pilihanWarna) return
-      try {
-        await simpanPilihanWarna(peserta.id, state.putaran, warna, otomatis)
-        const tersimpan = await ambilPilihanWarnaSaya(peserta.id, state.putaran)
-        setPilihanWarna(tersimpan)
-      } catch (e) {
-        setGalat(e instanceof Error ? e.message : String(e))
-      }
-    },
-    [peserta, state, pilihanWarna],
-  )
-
-  // Sistem memilihkan warna acak bila peserta tidak sempat memilih.
-  const autoWarnaRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (!state || !peserta || state.fase !== 'pilih_warna') return
-    if (pilihanWarna || sisaWarna > 0) return
-    if (autoWarnaRef.current === state.putaran) return
-    autoWarnaRef.current = state.putaran
-    void pilihWarna(DAFTAR_WARNA[Math.floor(Math.random() * DAFTAR_WARNA.length)], true)
-  }, [state, peserta, pilihanWarna, sisaWarna, pilihWarna])
-
   // ── Aksi: kirim jawaban ──────────────────────────────────────────────
   const kirimJawaban = useCallback(
     async (pilihan: Pilihan | null) => {
@@ -234,7 +188,6 @@ export default function Peserta() {
       setMengirim(true)
       try {
         const benar = pilihan !== null && pilihan === soal.jawaban
-        const berpengaruh = wajib || SUKARELA_MEMPENGARUHI_SALDO
 
         // Lama menjawab dihitung dari jam server agar adil lintas perangkat.
         // Dibulatkan: koreksi jam server menghasilkan pecahan milidetik,
@@ -246,15 +199,9 @@ export default function Peserta() {
             : durasiMs,
         )
 
-        // Efek nominal soal berlaku terlepas dari benar/salah — transaksinya
-        // memang terjadi. Yang membedakan hanya bonus atau dendanya.
-        // Kecepatan tidak menambah saldo; hanya penentu urutan saat seri.
-        let delta = 0
-        if (berpengaruh) {
-          const efekNominal =
-            soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
-          delta = efekNominal + (benar ? BONUS_BENAR : -DENDA)
-        }
+        // Hanya bonus dan denda yang menggerakkan saldo. Nominal soal tidak
+        // terlibat, dan kecepatan hanya jadi penentu urutan saat saldo seri.
+        const delta = benar ? BONUS_BENAR : -DENDA
 
         await simpanJawaban({
           peserta_id: peserta.id,
@@ -262,7 +209,7 @@ export default function Peserta() {
           soal_id: soal.id,
           pilihan,
           benar,
-          wajib,
+          wajib: true,
           delta_saldo: delta,
           waktu_jawab_ms: pilihan === null ? null : waktuMs,
           diterapkan: false,
@@ -278,18 +225,18 @@ export default function Peserta() {
         setMengirim(false)
       }
     },
-    [peserta, state, soal, jawaban, mengirim, wajib],
+    [peserta, state, soal, jawaban, mengirim],
   )
 
-  // Peserta WAJIB yang tidak menjawab sampai waktu habis dianggap salah.
+  // Tidak menjawab sampai waktu habis dianggap salah dan kena denda.
   const autoTimeoutRef = useRef<number | null>(null)
   useEffect(() => {
     if (!state || !peserta || !soal || state.fase !== 'soal') return
-    if (jawaban || sisaSoal > 0 || !wajib) return
+    if (jawaban || sisaSoal > 0) return
     if (autoTimeoutRef.current === state.putaran) return
     autoTimeoutRef.current = state.putaran
     void kirimJawaban(null)
-  }, [state, peserta, soal, jawaban, sisaSoal, wajib, kirimJawaban])
+  }, [state, peserta, soal, jawaban, sisaSoal, kirimJawaban])
 
   // ── Render ───────────────────────────────────────────────────────────
   if (memuat) {
@@ -315,7 +262,6 @@ export default function Peserta() {
   const hasilTerbuka = fase === 'reveal' || fase === 'skor' || fase === 'selesai'
   const perluCatat =
     hasilTerbuka &&
-    wajib &&
     jawaban?.benar === true &&
     soal !== null &&
     soal.efek !== 'netral' &&
@@ -324,7 +270,7 @@ export default function Peserta() {
   return (
     <div className="mx-auto min-h-screen w-full max-w-md px-4 pb-24 pt-4">
       {versiKedaluwarsa && <BannerVersi />}
-      <BadgeStatus peserta={peserta} warna={pilihanWarna?.warna ?? null} />
+      <BadgeStatus peserta={peserta} />
       <BadgeKoneksi status={koneksi} />
 
       {galat && (
@@ -335,7 +281,7 @@ export default function Peserta() {
 
       {(!state || !state.berjalan) && state?.fase !== 'selesai' && (
         <KartuInfo emoji="⏳" judul="Menunggu fasilitator memulai game…">
-          Siapkan HP-mu. Setiap putaran kamu akan diminta memilih warna kartu.
+          Siapkan HP-mu. Setiap soal akan muncul di layar ini — jawab secepat dan setepat mungkin.
         </KartuInfo>
       )}
 
@@ -355,35 +301,10 @@ export default function Peserta() {
         </div>
       )}
 
-      {state?.berjalan && state.fase === 'pilih_warna' && (
-        <FasePilihWarna
-          sisa={sisaWarna}
-          terpilih={pilihanWarna}
-          onPilih={(w) => pilihWarna(w)}
-          putaran={state.putaran}
-        />
-      )}
-
-      {state?.berjalan && state.fase === 'spin' && (
-        <KartuInfo emoji="🎰" judul="Roda sedang diputar…">
-          Warnamu putaran ini:{' '}
-          {pilihanWarna ? (
-            <b className={WARNA_META[pilihanWarna.warna].teks}>
-              {WARNA_META[pilihanWarna.warna].emoji} {WARNA_META[pilihanWarna.warna].label}
-            </b>
-          ) : (
-            '—'
-          )}
-          . Lihat layar fasilitator!
-        </KartuInfo>
-      )}
-
       {state?.berjalan && (state.fase === 'soal' || state.fase === 'reveal') && soal && (
         <FaseSoal
           soal={soal}
-          wajib={wajib}
-          warnaSpin={state.warna_spin}
-          warnaSaya={pilihanWarna?.warna ?? null}
+          putaran={state.putaran}
           sisa={sisaSoal}
           jawaban={jawaban}
           mengirim={mengirim}
@@ -518,23 +439,12 @@ function FormDaftar({
   )
 }
 
-function BadgeStatus({ peserta, warna }: { peserta: TPeserta; warna: Warna | null }) {
+function BadgeStatus({ peserta }: { peserta: TPeserta }) {
   const untung = peserta.saldo >= MODAL_AWAL
   return (
     <div className="mb-4 flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/80 px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-slate-100">{peserta.nama}</p>
-        <p className="mt-0.5 text-xs text-slate-400">
-          {warna ? (
-            <span className={WARNA_META[warna].teks}>
-              {WARNA_META[warna].emoji} {WARNA_META[warna].label} 🔒
-            </span>
-          ) : (
-            'Belum pilih warna'
-          )}
-        </p>
-      </div>
-      <div className="text-right">
+      <p className="min-w-0 truncate text-sm font-semibold text-slate-100">{peserta.nama}</p>
+      <div className="shrink-0 text-right">
         <p className={`text-lg font-bold tabular-nums ${untung ? 'text-green-400' : 'text-red-400'}`}>
           {rupiah(peserta.saldo)}
         </p>
@@ -580,65 +490,9 @@ function BadgeKoneksi({ status }: { status: StatusKoneksi }) {
   )
 }
 
-function FasePilihWarna({
-  sisa,
-  terpilih,
-  onPilih,
-  putaran,
-}: {
-  sisa: number
-  terpilih: PilihanWarna | null
-  onPilih: (w: Warna) => void
-  putaran: number
-}) {
-  return (
-    <div className="animasi-muncul rounded-2xl border border-slate-700 bg-slate-800/60 p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Putaran {putaran}</p>
-          <h2 className="font-bold text-slate-100">
-            {terpilih ? 'Warna terkunci' : 'Pilih warna kartumu'}
-          </h2>
-        </div>
-        {!terpilih && <TimerRing sisa={sisa} total={DURASI_PILIH_WARNA} ukuran={72} label="detik" />}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        {DAFTAR_WARNA.map((w) => {
-          const meta = WARNA_META[w]
-          const dipilih = terpilih?.warna === w
-          const redup = terpilih !== null && !dipilih
-          return (
-            <button
-              key={w}
-              onClick={() => onPilih(w)}
-              disabled={terpilih !== null}
-              className={`rounded-2xl px-4 py-6 text-lg font-bold text-white transition ${meta.bg} ${
-                terpilih ? '' : meta.bgHover + ' active:scale-95'
-              } ${redup ? 'opacity-25' : ''} ${dipilih ? 'ring-4 ring-white/80' : ''}`}
-            >
-              <span className="block text-3xl">{meta.emoji}</span>
-              <span className="mt-1 block text-sm">{meta.label}</span>
-              {dipilih && <span className="mt-1 block text-xs">🔒 Terkunci</span>}
-            </button>
-          )
-        })}
-      </div>
-
-      {terpilih?.otomatis && (
-        <p className="mt-3 text-center text-xs text-amber-400">
-          ⚡ Waktu habis — sistem memilihkan warna secara acak untukmu.
-        </p>
-      )}
-    </div>
-  )
-}
-
 function FaseSoal({
   soal,
-  wajib,
-  warnaSpin,
-  warnaSaya,
+  putaran,
   sisa,
   jawaban,
   mengirim,
@@ -646,9 +500,7 @@ function FaseSoal({
   onJawab,
 }: {
   soal: Soal
-  wajib: boolean
-  warnaSpin: Warna | null
-  warnaSaya: Warna | null
+  putaran: number
   sisa: number
   jawaban: JawabanPeserta | null
   mengirim: boolean
@@ -663,62 +515,14 @@ function FaseSoal({
 
   return (
     <div className="animasi-muncul space-y-4">
-      {/* Pengumuman hasil putaran roda */}
-      <div
-        className={`overflow-hidden rounded-2xl border ${
-          wajib ? 'border-amber-400/60' : 'border-slate-600'
-        }`}
-      >
-        <div
-          className={`px-4 py-4 text-center text-white ${
-            warnaSpin ? WARNA_META[warnaSpin].bg : 'bg-slate-700'
-          }`}
-        >
-          <p className="text-[11px] font-medium uppercase tracking-widest opacity-90">
-            🎰 Roda berhenti di
-          </p>
-          <p className="mt-0.5 text-2xl font-extrabold drop-shadow">
-            {warnaSpin ? `${WARNA_META[warnaSpin].emoji} ${WARNA_META[warnaSpin].label}` : '—'}
-          </p>
-        </div>
-
-        <div
-          className={`px-4 py-3 text-center ${
-            wajib ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800/80 text-slate-300'
-          }`}
-        >
-          {wajib ? (
-            <>
-              <p className="text-base font-extrabold tracking-wide">🎯 BERSIAP MENJAWAB</p>
-              <p className="mt-1 text-xs opacity-90">
-                Warnamu keluar — saldomu dipertaruhkan di soal ini.
-              </p>
-              <p className="mt-0.5 text-xs opacity-70">
-                Benar bonus {rupiah(BONUS_BENAR)} · Salah atau telat denda {rupiah(DENDA)}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-base font-extrabold tracking-wide">🙋 SUKARELA MENJAWAB</p>
-              <p className="mt-1 text-xs opacity-90">
-                {warnaSaya ? (
-                  <>
-                    Warnamu{' '}
-                    <b className={WARNA_META[warnaSaya].teks}>
-                      {WARNA_META[warnaSaya].emoji} {WARNA_META[warnaSaya].label}
-                    </b>{' '}
-                    tidak keluar putaran ini.
-                  </>
-                ) : (
-                  'Kamu bergabung setelah pemilihan warna ditutup.'
-                )}
-              </p>
-              <p className="mt-0.5 text-xs opacity-70">
-                Boleh ikut menjawab untuk latihan — saldomu tidak berubah, tanpa risiko denda.
-              </p>
-            </>
-          )}
-        </div>
+      <div className="rounded-2xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 text-center text-amber-300">
+        <p className="text-[11px] font-medium uppercase tracking-widest opacity-90">
+          Putaran {putaran}
+        </p>
+        <p className="text-base font-extrabold tracking-wide">🎯 JAWAB SECEPATNYA</p>
+        <p className="mt-0.5 text-xs opacity-75">
+          Benar bonus {rupiah(BONUS_BENAR)} · Salah atau telat denda {rupiah(DENDA)}
+        </p>
       </div>
 
       {/* Kartu soal */}
@@ -807,9 +611,7 @@ function FaseSoal({
 
       {!sudahJawab && habis && (
         <p className="text-center text-sm text-slate-400">
-          {wajib
-            ? 'Waktu habis. Menunggu fasilitator membuka jawaban…'
-            : 'Waktu habis. Kamu tidak ikut menjawab, saldomu tidak berubah.'}
+          Waktu habis. Menunggu fasilitator membuka jawaban…
         </p>
       )}
     </div>
@@ -828,80 +630,27 @@ function HasilJawaban({ jawaban, soal }: { jawaban: JawabanPeserta; soal: Soal }
     ? 'border-green-500/40 bg-green-500/10'
     : 'border-red-500/40 bg-red-500/10'
 
-  // Peserta sukarela tidak pernah terpengaruh saldonya.
-  if (!jawaban.wajib) {
-    return (
-      <div className={`rounded-2xl border p-4 text-center ${gaya}`}>
-        <p className={`font-bold ${benar ? 'text-green-400' : 'text-red-400'}`}>{judul}</p>
-        <p className="mt-1 text-sm text-slate-300">
-          Warnamu tidak keluar di putaran ini, jadi saldomu tidak berubah.
-        </p>
-        {benar && (
-          <p className="mt-1 text-xs text-slate-500">
-            Tetap dihitung untuk podium tercepat putaran ini.
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  const efekNominal =
-    soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
-
   return (
-    <div className={`rounded-2xl border p-4 ${gaya}`}>
-      <p className={`text-center font-bold ${benar ? 'text-green-400' : 'text-red-400'}`}>
-        {judul}
+    <div className={`rounded-2xl border p-4 text-center ${gaya}`}>
+      <p className={`font-bold ${benar ? 'text-green-400' : 'text-red-400'}`}>{judul}</p>
+
+      <p
+        className={`mt-1 text-lg font-bold tabular-nums ${
+          benar ? 'text-green-400' : 'text-red-400'
+        }`}
+      >
+        {selisih(jawaban.delta_saldo)}
+      </p>
+      <p className="text-xs text-slate-400">
+        {benar ? 'Bonus jawaban benar' : 'Denda jawaban salah'}
       </p>
 
-      {/* Rincian dibuka agar peserta paham dari mana angkanya, bukan sekadar
-          melihat saldonya berubah. */}
-      <div className="mt-3 space-y-1 rounded-xl bg-slate-900/50 p-3 text-sm">
-        {efekNominal !== 0 && (
-          <BarisRincian
-            label={soal.efek === 'masuk' ? 'Pemasukan dari transaksi' : 'Pengeluaran transaksi'}
-            nilai={efekNominal}
-          />
-        )}
-        <BarisRincian
-          label={benar ? 'Bonus jawaban benar' : 'Denda jawaban salah'}
-          nilai={benar ? BONUS_BENAR : -DENDA}
-        />
-        <div className="mt-1 border-t border-slate-700 pt-1.5">
-          <BarisRincian label="Total perubahan saldo" nilai={jawaban.delta_saldo} tebal />
-        </div>
-      </div>
-
-      {soal.efek !== 'netral' && !benar && (
-        <p className="mt-2 text-center text-xs text-slate-400">
-          Transaksinya tetap terjadi walau jawabanmu salah — itulah kenapa nominalnya tetap
+      {soal.efek !== 'netral' && (
+        <p className="mt-2 border-t border-slate-700 pt-2 text-xs text-slate-500">
+          Nilai transaksi soal ini {rupiah(soal.nominal)} — hanya sebagai konteks, tidak
           mempengaruhi saldo.
         </p>
       )}
-    </div>
-  )
-}
-
-function BarisRincian({
-  label,
-  nilai,
-  tebal,
-}: {
-  label: string
-  nilai: number
-  tebal?: boolean
-}) {
-  const positif = nilai > 0
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className={tebal ? 'font-semibold text-slate-100' : 'text-slate-400'}>{label}</span>
-      <span
-        className={`shrink-0 tabular-nums ${tebal ? 'text-base font-bold' : ''} ${
-          nilai === 0 ? 'text-slate-400' : positif ? 'text-green-400' : 'text-red-400'
-        }`}
-      >
-        {selisih(nilai)}
-      </span>
     </div>
   )
 }

@@ -218,19 +218,14 @@ export async function hapusSoal(id: number): Promise<void> {
 // ──────────────────────── PEMILIHAN SOAL ACAK ────────────────────────
 
 /**
- * Memilih 1 soal acak dengan warna tertentu, menghindari soal yang baru dipakai.
- * Jika semua soal warna itu sudah terpakai, riwayat diabaikan (fallback).
+ * Memilih 1 soal acak dari seluruh bank soal, menghindari soal yang baru
+ * dipakai. Jika semuanya sudah terpakai, riwayat diabaikan (fallback).
  */
-export function pilihSoalAcak(
-  semuaSoal: Soal[],
-  warna: Warna,
-  riwayat: number[],
-): Soal | null {
-  const sewarna = semuaSoal.filter((s) => s.warna === warna)
-  if (sewarna.length === 0) return null
+export function pilihSoalAcak(semuaSoal: Soal[], riwayat: number[]): Soal | null {
+  if (semuaSoal.length === 0) return null
 
-  const belumDipakai = sewarna.filter((s) => !riwayat.includes(s.id))
-  const kandidat = belumDipakai.length > 0 ? belumDipakai : sewarna
+  const belumDipakai = semuaSoal.filter((s) => !riwayat.includes(s.id))
+  const kandidat = belumDipakai.length > 0 ? belumDipakai : semuaSoal
   return kandidat[Math.floor(Math.random() * kandidat.length)]
 }
 

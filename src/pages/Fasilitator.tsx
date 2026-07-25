@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ambilSemuaJawaban,
   ambilSemuaPeserta,
-  ambilSemuaPilihanWarna,
   ambilSemuaSoal,
   ambilSemuaTransaksi,
   hapusSoal,
@@ -14,13 +13,12 @@ import {
   terapkanSaldoPutaran,
   ubahGameState,
 } from '../lib/api'
-import { DAFTAR_WARNA, DURASI_PILIH_WARNA, DURASI_SOAL, EFEK_META, WARNA_META } from '../lib/config'
+import { DURASI_SOAL, EFEK_META } from '../lib/config'
 import { useGameState, useRealtimeTabel, useSisaWaktu } from '../lib/hooks'
 import { sekarang } from '../lib/waktu'
 import { LABEL_OPSI, rupiah } from '../lib/format'
-import type { JawabanPeserta, Soal, Warna } from '../lib/types'
+import type { JawabanPeserta, Soal } from '../lib/types'
 import PinGate from '../components/PinGate'
-import SpinWheel from '../components/SpinWheel'
 import TimerRing from '../components/TimerRing'
 import EditorSoal from '../components/EditorSoal'
 import PapanSkorPutaran from '../components/PapanSkorPutaran'
@@ -29,7 +27,7 @@ import { useVersiKedaluwarsa } from '../lib/versi'
 import Dashboard, { type DataDashboard } from '../components/Dashboard'
 
 const KUNCI_PIN = 'juragan-terkaya:fasilitator'
-const TABEL_DIPANTAU = ['peserta', 'pilihan_warna', 'jawaban', 'transaksi']
+const TABEL_DIPANTAU = ['peserta', 'jawaban', 'transaksi']
 
 export default function Fasilitator() {
   const [lolos, setLolos] = useState(() => sessionStorage.getItem(KUNCI_PIN) === 'ok')
@@ -53,7 +51,6 @@ function PanelFasilitator() {
   const [soal, setSoal] = useState<Soal[]>([])
   const [data, setData] = useState<DataDashboard>({
     peserta: [],
-    warna: [],
     jawaban: [],
     transaksi: [],
     soal: [],
@@ -63,18 +60,10 @@ function PanelFasilitator() {
   const [galat, setGalat] = useState<string | null>(null)
   const [sibuk, setSibuk] = useState(false)
 
-  const [warnaHasil, setWarnaHasil] = useState<Warna | null>(null)
-  const [pemicuSpin, setPemicuSpin] = useState(0)
-  const spinSelesaiRef = useRef(0)
-
   const [daftarTerbuka, setDaftarTerbuka] = useState(false)
   const [notifBergabung, setNotifBergabung] = useState<string[]>([])
   const idPesertaSebelumnya = useRef<Set<string> | null>(null)
 
-  const sisaWarna = useSisaWaktu(
-    state?.fase === 'pilih_warna' ? state.fase_mulai : null,
-    DURASI_PILIH_WARNA,
-  )
   const sisaSoal = useSisaWaktu(state?.fase === 'soal' ? state.fase_mulai : null, DURASI_SOAL)
 
   // ── Muat bank soal (sekaligus isi data awal bila tabel masih kosong) ──
@@ -87,14 +76,13 @@ function PanelFasilitator() {
   // ── Muat data dashboard, disegarkan otomatis lewat realtime ──
   const muatData = useCallback(async () => {
     try {
-      const [peserta, warna, jawaban, transaksi, semuaSoal] = await Promise.all([
+      const [peserta, jawaban, transaksi, semuaSoal] = await Promise.all([
         ambilSemuaPeserta(),
-        ambilSemuaPilihanWarna(),
         ambilSemuaJawaban(),
         ambilSemuaTransaksi(),
         ambilSemuaSoal(),
       ])
-      setData({ peserta, warna, jawaban, transaksi, soal: semuaSoal })
+      setData({ peserta, jawaban, transaksi, soal: semuaSoal })
     } catch (e) {
       setGalat(e instanceof Error ? e.message : String(e))
     }
@@ -137,46 +125,31 @@ function PanelFasilitator() {
     }
   }, [])
 
-  const mulaiPutaran = (putaranBaru: number) =>
-    jalankan(async () => {
-      setWarnaHasil(null)
-      await ubahGameState({
-        berjalan: true,
-        fase: 'pilih_warna',
-        putaran: putaranBaru,
-        warna_spin: null,
-        soal_id: null,
-        fase_mulai: new Date(sekarang()).toISOString(),
-        reveal: false,
-        show_insight: false,
-      })
-    })
-
-  const putarRoda = () =>
-    jalankan(async () => {
-      const warna = DAFTAR_WARNA[Math.floor(Math.random() * DAFTAR_WARNA.length)]
-      setWarnaHasil(warna)
-      setPemicuSpin((p) => p + 1)
-      await ubahGameState({ fase: 'spin', warna_spin: warna, soal_id: null })
-    })
-
-  const bukaSoal = useCallback(() => {
-    if (!state?.warna_spin) return
-    void jalankan(async () => {
-      const terpilih = pilihSoalAcak(soal, state.warna_spin!, state.riwayat_soal ?? [])
-      if (!terpilih) {
-        throw new Error(
-          `Tidak ada soal berwarna ${state.warna_spin}. Tambahkan lewat Editor Soal terlebih dahulu.`,
-        )
-      }
-      await ubahGameState({
-        fase: 'soal',
-        soal_id: terpilih.id,
-        fase_mulai: new Date(sekarang()).toISOString(),
-        riwayat_soal: tambahRiwayat(state.riwayat_soal ?? [], terpilih.id),
-      })
-    })
-  }, [state, soal, jalankan])
+  /**
+   * Membuka putaran baru: langsung mengundi soal acak dan menampilkannya ke
+   * seluruh peserta. Tidak ada lagi fase pilih warna maupun putar roda —
+   * semua peserta menjawab setiap soal.
+   */
+  const mulaiPutaran = useCallback(
+    (putaranBaru: number) =>
+      jalankan(async () => {
+        const terpilih = pilihSoalAcak(soal, state?.riwayat_soal ?? [])
+        if (!terpilih) {
+          throw new Error('Bank soal masih kosong. Tambahkan soal lewat Editor Soal terlebih dahulu.')
+        }
+        await ubahGameState({
+          berjalan: true,
+          fase: 'soal',
+          putaran: putaranBaru,
+          soal_id: terpilih.id,
+          fase_mulai: new Date(sekarang()).toISOString(),
+          reveal: false,
+          show_insight: false,
+          riwayat_soal: tambahRiwayat(state?.riwayat_soal ?? [], terpilih.id),
+        })
+      }),
+    [soal, state?.riwayat_soal, jalankan],
+  )
 
   /**
    * Membuka jawaban sekaligus membukukan saldo seluruh peserta putaran ini.
@@ -205,7 +178,6 @@ function PanelFasilitator() {
     if (!confirm('Hapus SELURUH data peserta dan riwayat putaran? Bank soal tetap aman.')) return
     void jalankan(async () => {
       await resetGame()
-      setWarnaHasil(null)
       await muatData()
     })
   }
@@ -216,38 +188,18 @@ function PanelFasilitator() {
     [soal, state?.soal_id],
   )
 
-  const warnaPutaranIni = useMemo(
-    () => data.warna.filter((w) => w.putaran === state?.putaran),
-    [data.warna, state?.putaran],
-  )
-
   const namaPeserta = useMemo(
     () => new Map(data.peserta.map((p) => [p.id, p.nama])),
     [data.peserta],
   )
-
-  /** Nama peserta dikelompokkan per warna untuk putaran yang sedang berjalan. */
-  const pesertaPerWarna = useMemo(() => {
-    const peta = {} as Record<Warna, string[]>
-    for (const w of DAFTAR_WARNA) peta[w] = []
-    for (const pilihan of warnaPutaranIni) {
-      peta[pilihan.warna]?.push(namaPeserta.get(pilihan.peserta_id) ?? '—')
-    }
-    for (const w of DAFTAR_WARNA) peta[w].sort((a, b) => a.localeCompare(b, 'id'))
-    return peta
-  }, [warnaPutaranIni, namaPeserta])
 
   const jawabanPutaranIni = useMemo(
     () => data.jawaban.filter((j) => j.putaran === state?.putaran),
     [data.jawaban, state?.putaran],
   )
 
-  /** Peserta yang wajib menjawab putaran ini — dipakai melacak siapa yang belum. */
-  const idWajib = useMemo(
-    () =>
-      warnaPutaranIni.filter((w) => w.warna === state?.warna_spin).map((w) => w.peserta_id),
-    [warnaPutaranIni, state?.warna_spin],
-  )
+  /** Seluruh peserta kini wajib menjawab setiap soal. */
+  const idSemuaPeserta = useMemo(() => data.peserta.map((p) => p.id), [data.peserta])
 
   if (!state) {
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Memuat…</div>
@@ -341,38 +293,14 @@ function PanelFasilitator() {
         <Dashboard data={data} putaranAktif={state.putaran} revealAktif={state.reveal} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
-          {/* Kolom kiri: roda & kontrol */}
+          {/* Kolom kiri: kontrol putaran */}
           <section className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5 text-center">
-            <SpinWheel
-              hasil={warnaHasil ?? state.warna_spin}
-              pemicu={pemicuSpin}
-              onSelesai={() => {
-                if (spinSelesaiRef.current === pemicuSpin) return
-                spinSelesaiRef.current = pemicuSpin
-                bukaSoal()
-              }}
-            />
-
-            <div className="mt-4">
-              <StatusFase state={state} sisaWarna={sisaWarna} jumlahPilih={warnaPutaranIni.length} />
-            </div>
+            <StatusFase state={state} sisaSoal={sisaSoal} />
 
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               {!state.berjalan && state.fase !== 'selesai' && (
                 <Tombol utama onClick={() => mulaiPutaran(1)} sibuk={sibuk}>
                   ▶️ Mulai Game
-                </Tombol>
-              )}
-
-              {state.fase === 'pilih_warna' && (
-                <Tombol utama onClick={putarRoda} sibuk={sibuk}>
-                  🎰 Putar Roda
-                </Tombol>
-              )}
-
-              {state.fase === 'spin' && (
-                <Tombol onClick={bukaSoal} sibuk={sibuk}>
-                  ⏭️ Tampilkan Soal
                 </Tombol>
               )}
 
@@ -390,21 +318,31 @@ function PanelFasilitator() {
 
               {state.fase === 'reveal' && (
                 <Tombol utama={state.show_insight} onClick={bukaPapanSkor} sibuk={sibuk}>
-                  ➡️ Putaran Berikutnya
+                  ➡️ Lihat Papan Skor
                 </Tombol>
               )}
 
               {state.fase === 'skor' && (
                 <Tombol utama onClick={() => mulaiPutaran(state.putaran + 1)} sibuk={sibuk}>
-                  ▶️ Mulai Putaran {state.putaran + 1}
+                  ▶️ Soal Berikutnya
                 </Tombol>
               )}
 
-              {state.berjalan && (state.fase === 'soal' || state.fase === 'spin') && (
+              {state.berjalan && state.fase === 'soal' && (
                 <Tombol onClick={bukaPapanSkor} sibuk={sibuk}>
                   ⏭️ Lewati ke Papan Skor
                 </Tombol>
               )}
+
+              {/* Jaring pengaman: sesi lama bisa tersimpan dengan fase yang sudah
+                  tidak dikenali (pilih_warna / spin). Tanpa ini fasilitator
+                  tersangkut tanpa tombol lanjut. */}
+              {state.berjalan &&
+                !['soal', 'reveal', 'skor', 'selesai'].includes(state.fase) && (
+                  <Tombol utama onClick={() => mulaiPutaran(state.putaran || 1)} sibuk={sibuk}>
+                    ▶️ Tampilkan Soal
+                  </Tombol>
+                )}
 
               {state.berjalan && (
                 <Tombol bahaya onClick={akhiriGame} sibuk={sibuk}>
@@ -419,13 +357,9 @@ function PanelFasilitator() {
               )}
             </div>
 
-            {state.berjalan && state.putaran > 0 && (
-              <SebaranWarna
-                pesertaPerWarna={pesertaPerWarna}
-                warnaSpin={state.warna_spin}
-                totalPeserta={data.peserta.length}
-              />
-            )}
+            <div className="mt-5 text-left">
+              <DaftarPesertaBergabung peserta={data.peserta} belumMulai={!state.berjalan} />
+            </div>
           </section>
 
           {/* Kolom kanan: soal & rekap */}
@@ -450,11 +384,13 @@ function PanelFasilitator() {
                   jawaban={jawabanPutaranIni}
                   nama={namaPeserta}
                   terbuka={state.reveal}
-                  idWajib={idWajib}
+                  idSemuaPeserta={idSemuaPeserta}
                 />
               </>
             ) : (
-              <DaftarPesertaBergabung peserta={data.peserta} belumMulai={!state.berjalan} />
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-8 text-center text-slate-400">
+                Belum ada soal aktif. Tekan “Mulai Game” untuk menampilkan soal pertama.
+              </div>
             )}
           </section>
         </div>
@@ -619,87 +555,18 @@ function DaftarPesertaBergabung({
       <p className="mt-4 border-t border-slate-700 pt-3 text-xs text-slate-500">
         {belumMulai
           ? 'Tunggu sampai semua nama muncul, lalu klik “Mulai Game”.'
-          : 'Belum ada soal aktif. Putar roda untuk menampilkan soal.'}
+          : 'Nama bertambah otomatis bila ada peserta yang baru bergabung.'}
       </p>
-    </div>
-  )
-}
-
-/**
- * Sebaran pilihan warna seluruh peserta pada putaran berjalan.
- * Warna hasil spin ditandai agar fasilitator langsung tahu siapa yang wajib menjawab.
- */
-function SebaranWarna({
-  pesertaPerWarna,
-  warnaSpin,
-  totalPeserta,
-}: {
-  pesertaPerWarna: Record<Warna, string[]>
-  warnaSpin: Warna | null
-  totalPeserta: number
-}) {
-  const sudahMemilih = DAFTAR_WARNA.reduce((n, w) => n + pesertaPerWarna[w].length, 0)
-
-  return (
-    <div className="mt-5 text-left">
-      <div className="mb-2 flex items-baseline justify-between px-1">
-        <p className="text-xs uppercase tracking-wide text-slate-500">Pilihan warna peserta</p>
-        <p className="text-xs text-slate-400">
-          {sudahMemilih}/{totalPeserta} sudah memilih
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {DAFTAR_WARNA.map((w) => {
-          const meta = WARNA_META[w]
-          const anggota = pesertaPerWarna[w]
-          const iniHasilSpin = warnaSpin === w
-
-          return (
-            <div
-              key={w}
-              className={`rounded-xl border p-3 transition ${
-                iniHasilSpin
-                  ? 'border-amber-400 bg-amber-500/10 ring-1 ring-amber-400/40'
-                  : warnaSpin
-                    ? 'border-slate-700 bg-slate-900/60 opacity-60'
-                    : 'border-slate-700 bg-slate-900/60'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className={`text-sm font-bold ${meta.teks}`}>
-                  {meta.emoji} {meta.label}
-                </span>
-                <span className="shrink-0 rounded-md bg-slate-800 px-1.5 py-0.5 text-xs font-semibold text-slate-300">
-                  {anggota.length}
-                </span>
-              </div>
-
-              {iniHasilSpin && (
-                <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-400">
-                  🎯 Wajib menjawab
-                </p>
-              )}
-
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
-                {anggota.length > 0 ? anggota.join(', ') : <span className="text-slate-600">—</span>}
-              </p>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }
 
 function StatusFase({
   state,
-  sisaWarna,
-  jumlahPilih,
+  sisaSoal,
 }: {
   state: { fase: string; berjalan: boolean; putaran: number }
-  sisaWarna: number
-  jumlahPilih: number
+  sisaSoal: number
 }) {
   if (!state.berjalan && state.fase !== 'selesai') {
     return <p className="text-slate-400">Game belum dimulai.</p>
@@ -709,20 +576,18 @@ function StatusFase({
     return <p className="font-semibold text-amber-400">🏁 Game selesai — lihat tab Dashboard.</p>
   }
 
-  if (state.fase === 'pilih_warna') {
+  if (state.fase === 'soal') {
     return (
       <div className="flex items-center justify-center gap-4">
-        <TimerRing sisa={sisaWarna} total={DURASI_PILIH_WARNA} ukuran={72} label="detik" />
+        <TimerRing sisa={sisaSoal} total={DURASI_SOAL} ukuran={72} label="detik" />
         <div className="text-left">
-          <p className="font-semibold text-slate-100">Peserta memilih warna…</p>
-          <p className="text-sm text-slate-400">{jumlahPilih} peserta sudah memilih</p>
+          <p className="font-semibold text-slate-100">📝 Peserta menjawab…</p>
+          <p className="text-sm text-slate-400">Putaran {state.putaran}</p>
         </div>
       </div>
     )
   }
 
-  if (state.fase === 'spin') return <p className="font-semibold text-slate-100">🎰 Roda berputar…</p>
-  if (state.fase === 'soal') return <p className="font-semibold text-slate-100">📝 Peserta menjawab…</p>
   if (state.fase === 'skor')
     return <p className="font-semibold text-amber-400">🏆 Papan skor putaran {state.putaran}</p>
   return <p className="font-semibold text-green-400">✅ Jawaban sudah dibuka</p>
@@ -798,31 +663,34 @@ function RekapSingkat({
   jawaban,
   nama,
   terbuka,
-  idWajib,
+  idSemuaPeserta,
 }: {
   jawaban: JawabanPeserta[]
   nama: Map<string, string>
   terbuka: boolean
-  idWajib: string[]
+  idSemuaPeserta: string[]
 }) {
-  const wajib = jawaban.filter((j) => j.wajib)
-  const sukarela = jawaban.filter((j) => !j.wajib)
-
   const sudahMenjawab = new Set(jawaban.map((j) => j.peserta_id))
-  const belum = idWajib.filter((id) => !sudahMenjawab.has(id))
-  const persen = idWajib.length > 0 ? Math.round((wajib.length / idWajib.length) * 100) : 0
+  const belum = idSemuaPeserta.filter((id) => !sudahMenjawab.has(id))
+  const persen =
+    idSemuaPeserta.length > 0 ? Math.round((jawaban.length / idSemuaPeserta.length) * 100) : 0
+
+  const benar = jawaban.filter((j) => j.benar).length
+  // Diurutkan dari yang tercepat supaya terlihat siapa yang gesit.
+  const urut = [...jawaban].sort(
+    (a, b) => (a.waktu_jawab_ms ?? Infinity) - (b.waktu_jawab_ms ?? Infinity),
+  )
 
   return (
     <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-bold text-slate-100">Progress jawaban</h3>
         <span className="text-sm text-slate-400">
-          {wajib.length}/{idWajib.length} wajib
-          {sukarela.length > 0 && ` · +${sukarela.length} sukarela`}
+          {jawaban.length}/{idSemuaPeserta.length} peserta
+          {terbuka && ` · ${benar} benar`}
         </span>
       </div>
 
-      {/* Bilah progress peserta wajib */}
       <div className="mb-4 h-2 overflow-hidden rounded-full bg-slate-900">
         <div
           className="h-full rounded-full bg-amber-500 transition-all duration-500"
@@ -830,68 +698,15 @@ function RekapSingkat({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Kelompok judul="Wajib" daftar={wajib} nama={nama} aksen="text-amber-400" terbuka={terbuka} />
-        <Kelompok
-          judul="Sukarela"
-          daftar={sukarela}
-          nama={nama}
-          aksen="text-slate-400"
-          terbuka={terbuka}
-        />
-      </div>
-
-      {belum.length > 0 && (
-        <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-400">
-            Belum menjawab · {belum.length}
-          </p>
-          <p className="text-xs leading-relaxed text-slate-400">
-            {belum.map((id) => nama.get(id) ?? '—').join(', ')}
-          </p>
-        </div>
-      )}
-
-      {!terbuka && (
-        <p className="mt-3 text-xs text-slate-500">
-          Benar/salah disembunyikan sampai kamu menekan “Reveal Jawaban”.
-        </p>
-      )}
-    </div>
-  )
-}
-
-function Kelompok({
-  judul,
-  daftar,
-  nama,
-  aksen,
-  terbuka,
-}: {
-  judul: string
-  daftar: JawabanPeserta[]
-  nama: Map<string, string>
-  aksen: string
-  terbuka: boolean
-}) {
-  const benar = daftar.filter((j) => j.benar).length
-  // Sebelum dibuka, urutkan berdasarkan kecepatan supaya terlihat siapa yang gesit.
-  const urut = [...daftar].sort(
-    (a, b) => (a.waktu_jawab_ms ?? Infinity) - (b.waktu_jawab_ms ?? Infinity),
-  )
-
-  return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-      <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${aksen}`}>
-        {judul} · {terbuka ? `${benar}/${daftar.length} benar` : `${daftar.length} masuk`}
-      </p>
-
       {urut.length === 0 ? (
-        <p className="text-xs text-slate-600">—</p>
+        <p className="text-center text-xs text-slate-500">Belum ada jawaban yang masuk.</p>
       ) : (
-        <ul className="space-y-1">
+        <ul className="grid gap-1 sm:grid-cols-2">
           {urut.map((j) => (
-            <li key={j.id} className="flex items-center justify-between gap-2 text-xs">
+            <li
+              key={j.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-xs"
+            >
               <span className="truncate text-slate-300">{nama.get(j.peserta_id) ?? '—'}</span>
               <span className="flex shrink-0 items-center gap-1.5">
                 {j.waktu_jawab_ms !== null && (
@@ -911,6 +726,23 @@ function Kelompok({
             </li>
           ))}
         </ul>
+      )}
+
+      {belum.length > 0 && (
+        <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-400">
+            Belum menjawab · {belum.length}
+          </p>
+          <p className="text-xs leading-relaxed text-slate-400">
+            {belum.map((id) => nama.get(id) ?? '—').join(', ')}
+          </p>
+        </div>
+      )}
+
+      {!terbuka && (
+        <p className="mt-3 text-xs text-slate-500">
+          Benar/salah disembunyikan sampai kamu menekan “Reveal Jawaban”.
+        </p>
       )}
     </div>
   )

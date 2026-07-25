@@ -94,21 +94,16 @@ export default function PapanSkorPutaran({
                   }`}
                 >
                   <span className="text-2xl">{MEDALI[i]}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold text-slate-100">
-                      {nama.get(j.peserta_id) ?? '—'}
-                      {saya && <span className="ml-1.5 text-xs text-amber-300">(kamu)</span>}
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      {j.wajib ? 'Wajib' : 'Sukarela'}
-                    </span>
+                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-100">
+                    {nama.get(j.peserta_id) ?? '—'}
+                    {saya && <span className="ml-1.5 text-xs text-amber-300">(kamu)</span>}
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block font-bold tabular-nums text-amber-400">
                       {detik(j.waktu_jawab_ms)}
                     </span>
-                    <span className="block text-[11px] tabular-nums text-slate-400">
-                      {j.wajib ? selisih(j.delta_saldo) : 'tanpa saldo'}
+                    <span className="block text-[11px] tabular-nums text-green-400">
+                      {selisih(j.delta_saldo)}
                     </span>
                   </span>
                 </li>

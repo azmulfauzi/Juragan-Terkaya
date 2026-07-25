@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react'
-import { MODAL_AWAL, WARNA_META } from '../lib/config'
+import { MODAL_AWAL } from '../lib/config'
 import { rupiah, selisih } from '../lib/format'
 import { formatRataWaktu, hitungPeringkat } from '../lib/peringkat'
 import { hitungBukuBesar } from '../lib/bukuBesar'
 import BukuBesar from './BukuBesar'
-import type { JawabanPeserta, Peserta, PilihanWarna, Soal, Transaksi } from '../lib/types'
+import type { JawabanPeserta, Peserta, Soal, Transaksi } from '../lib/types'
 
 export interface DataDashboard {
   peserta: Peserta[]
-  warna: PilihanWarna[]
   jawaban: JawabanPeserta[]
   transaksi: Transaksi[]
   soal: Soal[]
@@ -16,7 +15,6 @@ export interface DataDashboard {
 
 const SUB_TAB = [
   { id: 'skor', label: '🏆 Papan Skor' },
-  { id: 'warna', label: '📋 Warna per Putaran' },
   { id: 'catatan', label: '📒 Catatan Transaksi' },
   { id: 'rekap', label: '💬 Rekap Jawaban' },
 ] as const
@@ -59,7 +57,6 @@ export default function Dashboard({ data, putaranAktif, revealAktif }: PropsDash
       ) : (
         <>
           {tab === 'skor' && <PapanSkor data={data} />}
-          {tab === 'warna' && <WarnaPerPutaran data={data} />}
           {tab === 'catatan' && <CatatanTransaksi data={data} />}
           {tab === 'rekap' && (
             <RekapJawaban data={data} putaranAktif={putaranAktif} revealAktif={revealAktif} />
@@ -78,84 +75,65 @@ function PapanSkor({ data }: { data: DataDashboard }) {
     [data.peserta, data.jawaban],
   )
 
-  const warnaTerakhir = useMemo(() => {
-    const peta = new Map<string, PilihanWarna>()
-    for (const w of data.warna) {
-      const ada = peta.get(w.peserta_id)
-      if (!ada || w.putaran > ada.putaran) peta.set(w.peserta_id, w)
-    }
-    return peta
-  }, [data.warna])
-
   const medali = ['🥇', '🥈', '🥉']
 
   return (
     <div>
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        {peringkat.slice(0, 3).map((p, i) => {
-          const w = warnaTerakhir.get(p.id)
-          return (
-            <div
-              key={p.id}
-              className="rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/15 to-transparent p-4 text-center"
+        {peringkat.slice(0, 3).map((p, i) => (
+          <div
+            key={p.id}
+            className="rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/15 to-transparent p-4 text-center"
+          >
+            <div className="text-3xl">{medali[i]}</div>
+            <p className="mt-1 truncate font-bold text-slate-100">{p.nama}</p>
+            <p className="mt-2 text-lg font-bold tabular-nums text-amber-400">{rupiah(p.saldo)}</p>
+            <p
+              className={`text-xs tabular-nums ${
+                p.saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
+              }`}
             >
-              <div className="text-3xl">{medali[i]}</div>
-              <p className="mt-1 truncate font-bold text-slate-100">{p.nama}</p>
-              <p className="text-xs text-slate-400">
-                {w ? `${WARNA_META[w.warna].emoji} ${WARNA_META[w.warna].label}` : '—'}
-              </p>
-              <p className="mt-2 text-lg font-bold tabular-nums text-amber-400">{rupiah(p.saldo)}</p>
-              <p
-                className={`text-xs tabular-nums ${
-                  p.saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
-                }`}
-              >
-                {selisih(p.saldo - MODAL_AWAL)}
-              </p>
-            </div>
-          )
-        })}
+              {selisih(p.saldo - MODAL_AWAL)}
+            </p>
+            <p className="text-[10px] text-slate-500">{formatRataWaktu(p.rataWaktuMs)}</p>
+          </div>
+        ))}
       </div>
 
       <div className="scroll-x rounded-xl border border-slate-700">
-        <table className="w-full min-w-[520px] text-sm">
+        <table className="w-full min-w-[460px] text-sm">
           <thead className="bg-slate-800 text-slate-400">
             <tr>
               <Th className="w-12">#</Th>
               <Th>Nama</Th>
-              <Th className="w-32">Warna terakhir</Th>
               <Th className="w-28 text-right">Rata waktu</Th>
               <Th className="w-40 text-right">Saldo</Th>
               <Th className="w-32 text-right">Selisih</Th>
             </tr>
           </thead>
           <tbody>
-            {peringkat.map((p, i) => {
-              const w = warnaTerakhir.get(p.id)
-              return (
-                <tr key={p.id} className="border-t border-slate-800">
-                  <Td className="text-slate-500">{i + 1}</Td>
-                  <Td className="font-medium text-slate-100">{p.nama}</Td>
-                  <Td>{w ? `${WARNA_META[w.warna].emoji} ${WARNA_META[w.warna].label}` : '—'}</Td>
-                  <Td
-                    className="text-right tabular-nums text-slate-400"
-                    title="Rata-rata waktu menjawab — penentu urutan bila saldo seri"
-                  >
-                    {formatRataWaktu(p.rataWaktuMs)}
-                  </Td>
-                  <Td className="text-right font-semibold tabular-nums text-slate-100">
-                    {rupiah(p.saldo)}
-                  </Td>
-                  <Td
-                    className={`text-right tabular-nums ${
-                      p.saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
-                    }`}
-                  >
-                    {selisih(p.saldo - MODAL_AWAL)}
-                  </Td>
-                </tr>
-              )
-            })}
+            {peringkat.map((p, i) => (
+              <tr key={p.id} className="border-t border-slate-800">
+                <Td className="text-slate-500">{i + 1}</Td>
+                <Td className="font-medium text-slate-100">{p.nama}</Td>
+                <Td
+                  className="text-right tabular-nums text-slate-400"
+                  title="Rata-rata waktu menjawab — penentu urutan bila saldo seri"
+                >
+                  {formatRataWaktu(p.rataWaktuMs)}
+                </Td>
+                <Td className="text-right font-semibold tabular-nums text-slate-100">
+                  {rupiah(p.saldo)}
+                </Td>
+                <Td
+                  className={`text-right tabular-nums ${
+                    p.saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
+                  }`}
+                >
+                  {selisih(p.saldo - MODAL_AWAL)}
+                </Td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -163,72 +141,14 @@ function PapanSkor({ data }: { data: DataDashboard }) {
   )
 }
 
-// ──────────────────────── 2. WARNA PER PUTARAN ────────────────────────
-
-function WarnaPerPutaran({ data }: { data: DataDashboard }) {
-  const maxPutaran = data.warna.reduce((m, w) => Math.max(m, w.putaran), 0)
-  const putaranList = Array.from({ length: maxPutaran }, (_, i) => i + 1)
-
-  const peta = useMemo(() => {
-    const m = new Map<string, PilihanWarna>()
-    for (const w of data.warna) m.set(`${w.peserta_id}:${w.putaran}`, w)
-    return m
-  }, [data.warna])
-
-  if (maxPutaran === 0) {
-    return <Kosong>Belum ada putaran yang dimainkan.</Kosong>
-  }
-
-  return (
-    <div className="scroll-x rounded-xl border border-slate-700">
-      <table className="w-full text-sm" style={{ minWidth: 220 + putaranList.length * 56 }}>
-        <thead className="bg-slate-800 text-slate-400">
-          <tr>
-            <Th className="sticky left-0 bg-slate-800">Nama</Th>
-            {putaranList.map((p) => (
-              <Th key={p} className="w-14 text-center">
-                P{p}
-              </Th>
-            ))}
-            <Th className="w-36 text-right">Saldo</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.peserta.map((p) => (
-            <tr key={p.id} className="border-t border-slate-800">
-              <Td className="sticky left-0 bg-slate-900 font-medium text-slate-100">{p.nama}</Td>
-              {putaranList.map((n) => {
-                const w = peta.get(`${p.id}:${n}`)
-                return (
-                  <Td key={n} className="text-center" title={w?.otomatis ? 'Dipilihkan sistem' : ''}>
-                    {w ? (
-                      <span className={w.otomatis ? 'opacity-50' : ''}>{WARNA_META[w.warna].emoji}</span>
-                    ) : (
-                      <span className="text-slate-700">–</span>
-                    )}
-                  </Td>
-                )
-              })}
-              <Td className="text-right font-semibold tabular-nums text-slate-100">
-                {rupiah(p.saldo)}
-              </Td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-// ───────────────────────── 3. CATATAN TRANSAKSI ─────────────────────────
+// ───────────────────────── 2. CATATAN TRANSAKSI ─────────────────────────
 
 /**
- * Buku besar per peserta: modal awal, tiap transaksi yang mempengaruhi saldo,
- * total bonus dan denda, lalu saldo akhir.
+ * Buku besar per peserta: modal awal, tiap jawaban beserta bonus atau dendanya,
+ * lalu saldo akhir.
  *
- * Hanya putaran saat peserta berstatus WAJIB yang muncul — hanya itu yang
- * mengubah saldo. Rinciannya direkonstruksi dari jawaban + bank soal, jadi
- * tetap utuh walau peserta lupa mengisi form catatan.
+ * Rinciannya direkonstruksi dari jawaban + bank soal, jadi tetap utuh walau
+ * peserta lupa mengisi form catatan.
  */
 function CatatanTransaksi({ data }: { data: DataDashboard }) {
   const [cari, setCari] = useState('')
@@ -366,8 +286,6 @@ function RekapJawaban({
   return (
     <div className="space-y-4">
       {perPutaran.map(([putaran, daftar]) => {
-        const wajib = daftar.filter((j) => j.wajib)
-        const sukarela = daftar.filter((j) => !j.wajib)
         const benar = daftar.filter((j) => j.benar).length
         const persen = daftar.length > 0 ? Math.round((benar / daftar.length) * 100) : 0
         const soal = soalPeta.get(daftar[0].soal_id)
@@ -391,15 +309,7 @@ function RekapJawaban({
                 🔒 Putaran ini masih berjalan. Detail muncul setelah kamu menekan “Reveal Jawaban”.
               </p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <KelompokJawaban judul="Wajib" daftar={wajib} nama={nama} aksen="text-amber-400" />
-                <KelompokJawaban
-                  judul="Sukarela"
-                  daftar={sukarela}
-                  nama={nama}
-                  aksen="text-slate-400"
-                />
-              </div>
+              <KelompokJawaban daftar={daftar} nama={nama} />
             )}
           </div>
         )
@@ -409,38 +319,39 @@ function RekapJawaban({
 }
 
 function KelompokJawaban({
-  judul,
   daftar,
   nama,
-  aksen,
 }: {
-  judul: string
   daftar: JawabanPeserta[]
   nama: Map<string, string>
-  aksen: string
 }) {
-  const benar = daftar.filter((j) => j.benar).length
+  // Diurutkan dari yang tercepat — penentu podium putaran.
+  const urut = [...daftar].sort(
+    (a, b) => (a.waktu_jawab_ms ?? Infinity) - (b.waktu_jawab_ms ?? Infinity),
+  )
+
+  if (urut.length === 0) return <p className="text-xs text-slate-600">—</p>
+
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-      <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${aksen}`}>
-        {judul} · {benar}/{daftar.length} benar
-      </p>
-      {daftar.length === 0 ? (
-        <p className="text-xs text-slate-600">—</p>
-      ) : (
-        <ul className="space-y-1">
-          {daftar.map((j) => (
-            <li key={j.id} className="flex items-center justify-between gap-2 text-xs">
-              <span className="truncate text-slate-300">{nama.get(j.peserta_id) ?? '—'}</span>
-              <span className="shrink-0">
-                <span className="mr-1 text-slate-500">{j.pilihan ?? '⏰'}</span>
-                {j.benar ? '✅' : '❌'}
+    <ul className="grid gap-1 sm:grid-cols-2">
+      {urut.map((j) => (
+        <li
+          key={j.id}
+          className="flex items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-xs"
+        >
+          <span className="truncate text-slate-300">{nama.get(j.peserta_id) ?? '—'}</span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {j.waktu_jawab_ms !== null && (
+              <span className="tabular-nums text-slate-500">
+                {(j.waktu_jawab_ms / 1000).toFixed(1)}s
               </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+            )}
+            <span className="text-slate-500">{j.pilihan ?? '⏰'}</span>
+            <span>{j.benar ? '✅' : '❌'}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

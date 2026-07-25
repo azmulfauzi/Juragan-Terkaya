@@ -7,22 +7,13 @@ export type Pilihan = 'A' | 'B' | 'C'
 
 /**
  * Fase permainan (disimpan di baris tunggal `game_state`).
- * - menunggu    : game belum dimulai / antar putaran
- * - pilih_warna : peserta memilih 1 dari 4 warna (10 detik)
- * - spin        : fasilitator memutar roda, peserta menunggu
- * - soal        : soal aktif, peserta menjawab (30 detik)
- * - reveal      : jawaban benar sudah dibuka fasilitator
- * - skor        : papan pemenang putaran + peringkat kumulatif, sebelum lanjut
- * - selesai     : game berakhir, tampilkan papan skor final
+ * - menunggu : game belum dimulai
+ * - soal     : soal aktif, seluruh peserta menjawab (30 detik)
+ * - reveal   : jawaban benar sudah dibuka fasilitator
+ * - skor     : papan pemenang putaran + peringkat kumulatif, sebelum lanjut
+ * - selesai  : game berakhir, tampilkan papan skor final
  */
-export type Fase =
-  | 'menunggu'
-  | 'pilih_warna'
-  | 'spin'
-  | 'soal'
-  | 'reveal'
-  | 'skor'
-  | 'selesai'
+export type Fase = 'menunggu' | 'soal' | 'reveal' | 'skor' | 'selesai'
 
 export interface Soal {
   id: number
@@ -74,8 +65,13 @@ export interface JawabanPeserta {
   /** null = tidak menjawab sampai waktu habis (timeout). */
   pilihan: Pilihan | null
   benar: boolean
-  /** true = warna peserta cocok dengan hasil spin (wajib jawab); false = ikut sukarela. */
+  /**
+   * Sisa dari mekanik warna lama. Seluruh peserta kini menjawab setiap soal,
+   * jadi nilainya selalu true. Kolomnya dipertahankan agar data sesi lama
+   * tetap terbaca tanpa perlu migrasi.
+   */
   wajib: boolean
+  /** Bonus jawaban benar atau denda jawaban salah. Nominal soal tidak lagi terlibat. */
   delta_saldo: number
   /** Lama menjawab (ms) sejak soal tampil. null untuk timeout. Penentu pemenang tercepat. */
   waktu_jawab_ms: number | null

@@ -75,22 +75,20 @@ halaman fasilitator pertama kali dibuka.
 
 Alur satu putaran:
 
-1. Fasilitator klik **Mulai Game** → peserta punya 10 detik memilih 1 dari 4 warna
-   (yang tidak sempat memilih akan dipilihkan sistem secara acak)
-2. Fasilitator klik **Putar Roda** → roda berhenti di satu warna
-3. Sistem mengambil 1 soal acak berwarna itu, lalu peserta punya 30 detik:
-   - Warna **cocok** dengan hasil spin → **wajib** menjawab, saldo dipertaruhkan
-   - Warna **tidak cocok** → **boleh ikut** menjawab untuk latihan, saldo tidak
-     berubah sama sekali dan tidak mengisi catatan transaksi
-4. Fasilitator memantau progress: siapa sudah menjawab, siapa belum, berapa detik.
+1. Fasilitator klik **Mulai Game** → sistem mengambil 1 soal acak dan langsung
+   menampilkannya ke seluruh peserta
+2. Semua peserta punya 30 detik untuk menjawab — tidak ada pembagian giliran,
+   semua bermain di setiap soal
+3. Fasilitator memantau progress: siapa sudah menjawab dan berapa detik.
    Benar/salah masih tersembunyi — aman kalau layar di-share
-5. Fasilitator klik **Reveal Jawaban** → saat inilah saldo seluruh peserta
+4. Fasilitator klik **Reveal Jawaban** → saat inilah saldo seluruh peserta
    dibukukan serentak, dan peserta baru tahu benar/salah
-6. Fasilitator klik **Tampilkan Insight** untuk membahas pelajarannya
-7. Peserta wajib yang menjawab benar mengisi **form catatan transaksi**
-8. Fasilitator klik **Putaran Berikutnya** → muncul **podium tercepat** putaran itu
+5. Fasilitator klik **Tampilkan Insight** untuk membahas pelajarannya
+6. Peserta yang menjawab benar mengisi **form catatan transaksi** sebagai latihan
+   mencatat (tidak mempengaruhi saldo)
+7. Fasilitator klik **Lihat Papan Skor** → muncul **podium tercepat** putaran itu
    dan **peringkat kumulatif**, di layar fasilitator maupun HP peserta
-9. Klik **Mulai Putaran berikutnya**, atau **Akhiri Game** untuk menutup sesi
+8. Klik **Soal Berikutnya**, atau **Akhiri Game** untuk menutup sesi
 
 Jumlah putaran tidak dibatasi — fasilitator yang menentukan kapan berhenti.
 
@@ -99,27 +97,25 @@ Jumlah putaran tidak dibatasi — fasilitator yang menentukan kapan berhenti.
 
 ### Perhitungan saldo
 
-Hanya peserta **wajib** (warnanya keluar di spin) yang saldonya berubah:
-
 ```
-delta = efek nominal soal + (benar ? +Rp1.000.000 : −Rp500.000)
+delta = benar ? +Rp1.000.000 : −Rp500.000
 ```
 
-Efek nominal berlaku **terlepas dari benar atau salah** — transaksinya memang
-terjadi. Yang membedakan hanya bonus atau dendanya.
+| Hasil jawaban | Perubahan saldo |
+|---|---|
+| Benar | `+Rp1.000.000` |
+| Salah atau tidak menjawab | `−Rp500.000` |
 
-| Tipe soal | Jawaban benar | Salah / tidak menjawab |
-|---|---|---|
-| ➕ Pemasukan | `+nominal +1.000.000` | `+nominal −500.000` |
-| ➖ Pengeluaran | `−nominal +1.000.000` | `−nominal −500.000` |
-| ⬜ Diskusi | `+1.000.000` | `−500.000` |
-
-Peserta **sukarela** tidak terpengaruh sama sekali.
+**Nominal dan jenis efek soal tidak mempengaruhi saldo.** Keduanya tetap ada di
+bank soal sebagai bahan pembelajaran — ditampilkan setelah reveal dan mengisi form
+catatan transaksi — tapi tidak menggerakkan angka. Akibatnya saldo menjadi
+cerminan langsung dari jumlah jawaban benar, sehingga peringkat mudah dijelaskan
+ke peserta.
 
 ### Penentuan pemenang
 
 - **Podium putaran** — di antara peserta yang sama-sama menjawab **benar**, yang
-  **tercepat** menang. Peserta sukarela ikut diperhitungkan di podium.
+  **tercepat** menang.
 - **Peringkat akhir** — saldo tertinggi. Bila saldo **seri**, yang **rata-rata waktu
   menjawabnya lebih cepat** berada di atas. Kecepatan tidak pernah menambah uang.
 
@@ -134,16 +130,18 @@ Semua ada di [`src/lib/config.ts`](src/lib/config.ts):
 | `MODAL_AWAL` | `10.000.000` | Saldo awal tiap peserta |
 | `DENDA` | `500.000` | Potongan untuk jawaban salah / telat |
 | `BONUS_BENAR` | `1.000.000` | Bonus untuk jawaban benar |
-| `DURASI_PILIH_WARNA` | `10` detik | Waktu memilih warna |
 | `DURASI_SOAL` | `30` detik | Waktu menjawab soal |
 | `RIWAYAT_SOAL_MAX` | `20` | Berapa soal terakhir dihindari agar tidak berulang |
-| `SUKARELA_MEMPENGARUHI_SALDO` | `false` | Apakah jawaban sukarela ikut mengubah saldo |
 
 PIN fasilitator diatur lewat `VITE_FASILITATOR_PIN` di `.env`.
 
 **Bank soal** tidak perlu diubah lewat kode — fasilitator dapat mengedit,
 menambah, dan menyimpannya langsung dari tombol **✏️ Edit Soal** di dashboard.
 Perubahan tersimpan permanen di database dan tidak ikut terhapus saat Reset.
+
+> Warna pada soal kini hanya berfungsi sebagai **label pengelompokan** di editor,
+> memudahkan penyaringan saat bank soal sudah banyak. Warna tidak lagi
+> mempengaruhi jalannya permainan.
 
 ---
 
