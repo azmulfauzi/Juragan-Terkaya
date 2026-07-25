@@ -64,6 +64,10 @@ function PanelFasilitator() {
   const [pemicuSpin, setPemicuSpin] = useState(0)
   const spinSelesaiRef = useRef(0)
 
+  const [daftarTerbuka, setDaftarTerbuka] = useState(false)
+  const [notifBergabung, setNotifBergabung] = useState<string[]>([])
+  const idPesertaSebelumnya = useRef<Set<string> | null>(null)
+
   const sisaWarna = useSisaWaktu(
     state?.fase === 'pilih_warna' ? state.fase_mulai : null,
     DURASI_PILIH_WARNA,
@@ -97,6 +101,25 @@ function PanelFasilitator() {
     muatData()
   }, [muatData])
   useRealtimeTabel(TABEL_DIPANTAU, muatData)
+
+  // ── Notifikasi peserta baru bergabung ────────────────────────────────
+  useEffect(() => {
+    const idSekarang = new Set(data.peserta.map((p) => p.id))
+
+    // Pemuatan pertama bukan "peserta baru" — jangan dinotifikasi.
+    if (idPesertaSebelumnya.current === null) {
+      idPesertaSebelumnya.current = idSekarang
+      return
+    }
+
+    const baru = data.peserta.filter((p) => !idPesertaSebelumnya.current!.has(p.id))
+    idPesertaSebelumnya.current = idSekarang
+    if (baru.length === 0) return
+
+    const namaBaru = baru.map((p) => p.nama)
+    setNotifBergabung((n) => [...n, ...namaBaru])
+    setTimeout(() => setNotifBergabung((n) => n.slice(namaBaru.length)), 5000)
+  }, [data.peserta])
 
   // ── Aksi fasilitator ─────────────────────────────────────────────────
   const jalankan = useCallback(async (aksi: () => Promise<void>) => {
@@ -233,9 +256,16 @@ function PanelFasilitator() {
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-amber-400">💰 Juragan Terkaya</h1>
-          <p className="text-xs text-slate-400">
-            Panel Fasilitator · {data.peserta.length} peserta bergabung
-            {state.berjalan && ` · Putaran ${state.putaran}`}
+          <p className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
+            <span>Panel Fasilitator ·</span>
+            <button
+              onClick={() => setDaftarTerbuka((v) => !v)}
+              className="rounded px-1 py-0.5 font-semibold text-amber-400 underline decoration-dotted underline-offset-2 transition hover:bg-slate-800"
+              title="Klik untuk melihat nama peserta"
+            >
+              {data.peserta.length} peserta bergabung {daftarTerbuka ? '▴' : '▾'}
+            </button>
+            {state.berjalan && <span>· Putaran {state.putaran}</span>}
           </p>
         </div>
         <div className="flex gap-2">
@@ -253,6 +283,38 @@ function PanelFasilitator() {
           </button>
         </div>
       </header>
+
+      {daftarTerbuka && (
+        <div className="animasi-muncul mb-4 rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-100">👥 Peserta yang sudah bergabung</h2>
+            <button
+              onClick={() => setDaftarTerbuka(false)}
+              className="rounded px-2 py-0.5 text-xs text-slate-400 transition hover:bg-slate-700 hover:text-slate-100"
+            >
+              Tutup
+            </button>
+          </div>
+
+          {data.peserta.length === 0 ? (
+            <p className="py-3 text-center text-sm text-slate-400">
+              Belum ada peserta. Nama akan muncul di sini otomatis begitu mereka mendaftar.
+            </p>
+          ) : (
+            <ol className="grid gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+              {data.peserta.map((p, i) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5"
+                >
+                  <span className="w-5 shrink-0 text-xs tabular-nums text-slate-500">{i + 1}</span>
+                  <span className="truncate text-sm text-slate-100">{p.nama}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
 
       {galat && (
         <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
@@ -390,6 +452,22 @@ function PanelFasilitator() {
               <DaftarPesertaBergabung peserta={data.peserta} belumMulai={!state.berjalan} />
             )}
           </section>
+        </div>
+      )}
+
+      {/* Notifikasi peserta baru bergabung */}
+      {notifBergabung.length > 0 && (
+        <div className="pointer-events-none fixed bottom-4 right-4 z-40 space-y-2">
+          {notifBergabung.map((nama, i) => (
+            <div
+              key={`${nama}-${i}`}
+              className="animasi-muncul rounded-xl border border-green-500/50 bg-green-500/15 px-4 py-2.5 shadow-lg backdrop-blur"
+            >
+              <p className="text-sm text-green-300">
+                🙋 <b className="text-slate-100">{nama}</b> bergabung
+              </p>
+            </div>
+          ))}
         </div>
       )}
 
