@@ -13,6 +13,7 @@ import {
   simpanTransaksi,
 } from '../lib/api'
 import {
+  BONUS_BENAR,
   DAFTAR_WARNA,
   DENDA,
   DURASI_PILIH_WARNA,
@@ -216,15 +217,14 @@ export default function Peserta() {
             : durasiMs,
         )
 
-        // Kecepatan tidak menambah saldo — hanya dipakai sebagai penentu urutan
-        // saat terjadi seri (lihat src/lib/peringkat.ts).
+        // Efek nominal soal berlaku terlepas dari benar/salah — transaksinya
+        // memang terjadi. Yang membedakan hanya bonus atau dendanya.
+        // Kecepatan tidak menambah saldo; hanya penentu urutan saat seri.
         let delta = 0
         if (berpengaruh) {
-          if (benar) {
-            delta = soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
-          } else {
-            delta = -DENDA
-          }
+          const efekNominal =
+            soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
+          delta = efekNominal + (benar ? BONUS_BENAR : -DENDA)
         }
 
         await simpanJawaban({
@@ -655,30 +655,32 @@ function FaseSoal({
         >
           {wajib ? (
             <>
-              <p className="font-bold">🎯 Warnamu cocok — kamu WAJIB menjawab!</p>
-              <p className="mt-0.5 text-xs opacity-80">
-                Tidak menjawab sampai waktu habis kena denda {rupiah(DENDA)}.
+              <p className="text-base font-extrabold tracking-wide">🎯 BERSIAP MENJAWAB</p>
+              <p className="mt-1 text-xs opacity-90">
+                Warnamu keluar — saldomu dipertaruhkan di soal ini.
+              </p>
+              <p className="mt-0.5 text-xs opacity-70">
+                Benar bonus {rupiah(BONUS_BENAR)} · Salah atau telat denda {rupiah(DENDA)}
               </p>
             </>
           ) : (
             <>
-              <p className="text-sm">
+              <p className="text-base font-extrabold tracking-wide">🙋 SUKARELA MENJAWAB</p>
+              <p className="mt-1 text-xs opacity-90">
                 {warnaSaya ? (
                   <>
                     Warnamu{' '}
                     <b className={WARNA_META[warnaSaya].teks}>
                       {WARNA_META[warnaSaya].emoji} {WARNA_META[warnaSaya].label}
                     </b>{' '}
-                    — boleh ikut jawab
+                    tidak keluar putaran ini.
                   </>
                 ) : (
-                  'Kamu belum memilih warna — boleh ikut jawab'
+                  'Kamu bergabung setelah pemilihan warna ditutup.'
                 )}
               </p>
               <p className="mt-0.5 text-xs opacity-70">
-                {warnaSaya
-                  ? 'Warnamu tidak keluar, jadi jawabanmu tidak mengubah saldo. Ikut menjawab untuk latihan — tanpa risiko denda.'
-                  : 'Kamu bergabung setelah pemilihan warna ditutup. Jawabanmu tidak mengubah saldo — ikut saja untuk latihan.'}
+                Boleh ikut menjawab untuk latihan — saldomu tidak berubah, tanpa risiko denda.
               </p>
             </>
           )}
@@ -781,22 +783,26 @@ function FaseSoal({
 }
 
 function HasilJawaban({ jawaban, soal }: { jawaban: JawabanPeserta; soal: Soal }) {
-  // Peserta sukarela (warnanya tidak keluar di spin) tidak pernah terpengaruh
-  // saldonya, baik jawabannya benar maupun salah.
-  const catatanSukarela = 'Warnamu tidak keluar di putaran ini, jadi saldomu tidak berubah.'
+  const benar = jawaban.benar
+  const judul = benar
+    ? '✅ Jawaban benar!'
+    : jawaban.pilihan === null
+      ? '⏰ Waktu habis!'
+      : '❌ Jawaban salah'
 
-  if (jawaban.benar) {
+  const gaya = benar
+    ? 'border-green-500/40 bg-green-500/10'
+    : 'border-red-500/40 bg-red-500/10'
+
+  // Peserta sukarela tidak pernah terpengaruh saldonya.
+  if (!jawaban.wajib) {
     return (
-      <div className="rounded-2xl border border-green-500/40 bg-green-500/10 p-4 text-center">
-        <p className="font-bold text-green-400">✅ Jawaban benar!</p>
+      <div className={`rounded-2xl border p-4 text-center ${gaya}`}>
+        <p className={`font-bold ${benar ? 'text-green-400' : 'text-red-400'}`}>{judul}</p>
         <p className="mt-1 text-sm text-slate-300">
-          {!jawaban.wajib
-            ? catatanSukarela
-            : soal.efek === 'netral'
-              ? 'Soal diskusi — saldo tidak berubah.'
-              : `Saldo ${soal.efek === 'masuk' ? 'bertambah' : 'berkurang'} ${rupiah(soal.nominal)}.`}
+          Warnamu tidak keluar di putaran ini, jadi saldomu tidak berubah.
         </p>
-        {!jawaban.wajib && (
+        {benar && (
           <p className="mt-1 text-xs text-slate-500">
             Tetap dihitung untuk podium tercepat putaran ini.
           </p>
@@ -805,18 +811,63 @@ function HasilJawaban({ jawaban, soal }: { jawaban: JawabanPeserta; soal: Soal }
     )
   }
 
+  const efekNominal =
+    soal.efek === 'masuk' ? soal.nominal : soal.efek === 'keluar' ? -soal.nominal : 0
+
   return (
-    <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-center">
-      <p className="font-bold text-red-400">
-        {jawaban.pilihan === null ? '⏰ Waktu habis!' : '❌ Jawaban salah'}
+    <div className={`rounded-2xl border p-4 ${gaya}`}>
+      <p className={`text-center font-bold ${benar ? 'text-green-400' : 'text-red-400'}`}>
+        {judul}
       </p>
-      <p className="mt-1 text-sm text-slate-300">
-        {!jawaban.wajib
-          ? catatanSukarela
-          : jawaban.delta_saldo === 0
-            ? 'Saldomu tidak berubah.'
-            : `Saldo dikurangi denda ${rupiah(DENDA)}.`}
-      </p>
+
+      {/* Rincian dibuka agar peserta paham dari mana angkanya, bukan sekadar
+          melihat saldonya berubah. */}
+      <div className="mt-3 space-y-1 rounded-xl bg-slate-900/50 p-3 text-sm">
+        {efekNominal !== 0 && (
+          <BarisRincian
+            label={soal.efek === 'masuk' ? 'Pemasukan dari transaksi' : 'Pengeluaran transaksi'}
+            nilai={efekNominal}
+          />
+        )}
+        <BarisRincian
+          label={benar ? 'Bonus jawaban benar' : 'Denda jawaban salah'}
+          nilai={benar ? BONUS_BENAR : -DENDA}
+        />
+        <div className="mt-1 border-t border-slate-700 pt-1.5">
+          <BarisRincian label="Total perubahan saldo" nilai={jawaban.delta_saldo} tebal />
+        </div>
+      </div>
+
+      {soal.efek !== 'netral' && !benar && (
+        <p className="mt-2 text-center text-xs text-slate-400">
+          Transaksinya tetap terjadi walau jawabanmu salah — itulah kenapa nominalnya tetap
+          mempengaruhi saldo.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function BarisRincian({
+  label,
+  nilai,
+  tebal,
+}: {
+  label: string
+  nilai: number
+  tebal?: boolean
+}) {
+  const positif = nilai > 0
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className={tebal ? 'font-semibold text-slate-100' : 'text-slate-400'}>{label}</span>
+      <span
+        className={`shrink-0 tabular-nums ${tebal ? 'text-base font-bold' : ''} ${
+          nilai === 0 ? 'text-slate-400' : positif ? 'text-green-400' : 'text-red-400'
+        }`}
+      >
+        {selisih(nilai)}
+      </span>
     </div>
   )
 }

@@ -6,6 +6,27 @@ export const MODAL_AWAL = 10_000_000
 /** Denda untuk jawaban salah atau tidak menjawab sampai waktu habis. */
 export const DENDA = 500_000
 
+/** Bonus untuk jawaban benar. */
+export const BONUS_BENAR = 1_000_000
+
+/**
+ * Rumus perubahan saldo peserta WAJIB:
+ *
+ *     delta = efek nominal soal + (benar ? +BONUS_BENAR : −DENDA)
+ *
+ * Efek nominal berlaku terlepas dari benar atau salah — transaksinya memang
+ * terjadi di dunia nyata. Yang membedakan hanyalah bonus atau dendanya.
+ *
+ * | Tipe soal   | Benar                 | Salah / tidak menjawab |
+ * |-------------|-----------------------|------------------------|
+ * | Pemasukan   | +nominal +1.000.000   | +nominal −500.000      |
+ * | Pengeluaran | −nominal +1.000.000   | −nominal −500.000      |
+ * | Diskusi     |          +1.000.000   |          −500.000      |
+ *
+ * Peserta sukarela tidak terpengaruh sama sekali (lihat
+ * SUKARELA_MEMPENGARUHI_SALDO di bawah).
+ */
+
 /** Durasi fase pilih warna (detik). */
 export const DURASI_PILIH_WARNA = 10
 

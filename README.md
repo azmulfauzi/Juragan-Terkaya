@@ -97,6 +97,25 @@ Jumlah putaran tidak dibatasi — fasilitator yang menentukan kapan berhenti.
 > **Penting:** menekan **Reveal Jawaban** tidak boleh dilewat. Saldo peserta baru
 > dibukukan pada langkah itu — kalau dilewati, papan skor tidak bergerak.
 
+### Perhitungan saldo
+
+Hanya peserta **wajib** (warnanya keluar di spin) yang saldonya berubah:
+
+```
+delta = efek nominal soal + (benar ? +Rp1.000.000 : −Rp500.000)
+```
+
+Efek nominal berlaku **terlepas dari benar atau salah** — transaksinya memang
+terjadi. Yang membedakan hanya bonus atau dendanya.
+
+| Tipe soal | Jawaban benar | Salah / tidak menjawab |
+|---|---|---|
+| ➕ Pemasukan | `+nominal +1.000.000` | `+nominal −500.000` |
+| ➖ Pengeluaran | `−nominal +1.000.000` | `−nominal −500.000` |
+| ⬜ Diskusi | `+1.000.000` | `−500.000` |
+
+Peserta **sukarela** tidak terpengaruh sama sekali.
+
 ### Penentuan pemenang
 
 - **Podium putaran** — di antara peserta yang sama-sama menjawab **benar**, yang
@@ -114,6 +133,7 @@ Semua ada di [`src/lib/config.ts`](src/lib/config.ts):
 |---|---|---|
 | `MODAL_AWAL` | `10.000.000` | Saldo awal tiap peserta |
 | `DENDA` | `500.000` | Potongan untuk jawaban salah / telat |
+| `BONUS_BENAR` | `1.000.000` | Bonus untuk jawaban benar |
 | `DURASI_PILIH_WARNA` | `10` detik | Waktu memilih warna |
 | `DURASI_SOAL` | `30` detik | Waktu menjawab soal |
 | `RIWAYAT_SOAL_MAX` | `20` | Berapa soal terakhir dihindari agar tidak berulang |
