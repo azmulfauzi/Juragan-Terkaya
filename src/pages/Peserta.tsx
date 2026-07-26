@@ -408,7 +408,7 @@ function FormDaftar({
       <form onSubmit={kirim} className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-800/60 p-7">
         <div className="mb-6 text-center">
           <div className="mb-2 text-5xl">💰</div>
-          <h1 className="text-xl font-bold text-amber-400">Juragan Terkaya</h1>
+          <h1 className="text-xl font-bold text-amber-400">Games Literasi Keuangan</h1>
           <p className="mt-2 text-sm text-slate-400">
             Kamu akan memulai usaha dengan modal
             <br />

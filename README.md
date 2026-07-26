@@ -1,4 +1,4 @@
-# 💰 Juragan Terkaya
+# 💰 Games Literasi Keuangan
 
 Game edukasi literasi keuangan UMKM untuk dimainkan serentak oleh banyak peserta
 (50+) dari HP masing-masing, dikendalikan satu fasilitator dari layar besar.
@@ -6,7 +6,7 @@ Game edukasi literasi keuangan UMKM untuk dimainkan serentak oleh banyak peserta
 Dua pesan utama yang ditanamkan: **pisahkan uang pribadi dan usaha**, serta
 **catat setiap transaksi usaha**.
 
-Spesifikasi lengkap ada di [prd_juragan_terkaya.md](prd_juragan_terkaya.md).
+Spesifikasi awal ada di [prd_juragan_terkaya.md](prd_juragan_terkaya.md) — dokumen itu memakai nama lama "Juragan Terkaya" dan sebagian aturannya sudah berubah.
 
 ---
 

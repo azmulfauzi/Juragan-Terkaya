@@ -7,10 +7,10 @@ export default function Home() {
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       <div className="w-full max-w-md text-center">
         <div className="mb-3 text-6xl">💰</div>
-        <h1 className="text-3xl font-extrabold text-amber-400">Juragan Terkaya</h1>
+        <h1 className="text-3xl font-extrabold text-amber-400">Games Literasi Keuangan</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Game edukasi literasi keuangan UMKM — kelola modal {rupiah(MODAL_AWAL)}, catat
-          transaksimu, jadilah juragan dengan saldo tertinggi.
+          Kuis interaktif untuk UMKM — mulai dengan modal {rupiah(MODAL_AWAL)}, jawab dengan tepat
+          dan cepat, raih saldo tertinggi.
         </p>
 
         <div className="mt-8 space-y-3">

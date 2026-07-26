@@ -248,7 +248,7 @@ function PanelFasilitator() {
       {/* Header */}
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold text-amber-400">💰 Juragan Terkaya</h1>
+          <h1 className="text-xl font-extrabold text-amber-400">💰 Games Literasi Keuangan</h1>
           <p className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
             <span>Panel Fasilitator ·</span>
             <button

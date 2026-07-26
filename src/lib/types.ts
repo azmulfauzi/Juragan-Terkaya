@@ -1,4 +1,4 @@
-// Tipe data inti game "Juragan Terkaya".
+// Tipe data inti "Games Literasi Keuangan".
 // Nama field sengaja memakai Bahasa Indonesia agar selaras dengan PRD & skema database.
 
 export type Efek = 'masuk' | 'keluar' | 'netral'
