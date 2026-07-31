@@ -79,7 +79,11 @@ export interface JawabanPeserta {
    * tetap terbaca tanpa perlu migrasi.
    */
   wajib: boolean
-  /** Bonus jawaban benar atau denda jawaban salah. Nominal soal tidak lagi terlibat. */
+  /**
+   * Peninggalan versi bersaldo, selalu 0. Kolomnya dipertahankan agar data
+   * sesi lama tetap terbaca tanpa perlu migrasi. Penilaian sekarang memakai
+   * poin yang dihitung ulang dari `benar` dan `waktu_jawab_ms`.
+   */
   delta_saldo: number
   /** Lama menjawab (ms) sejak soal tampil. null untuk timeout. Penentu pemenang tercepat. */
   waktu_jawab_ms: number | null
