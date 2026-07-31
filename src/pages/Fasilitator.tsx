@@ -4,19 +4,21 @@ import {
   ambilSemuaPeserta,
   ambilSemuaSoal,
   ambilSemuaTema,
-  ambilSemuaTransaksi,
+
   ambilSoalTema,
   pilihSoalAcak,
   resetGame,
   seedTemaJikaKosong,
   tambahRiwayat,
-  terapkanSaldoPutaran,
+  bukaJawabanPutaran,
+  sisaSoalAktif,
   ubahGameState,
 } from '../lib/api'
 import { DURASI_SOAL, EFEK_META } from '../lib/config'
 import { useGameState, useRealtimeTabel, useSisaWaktu } from '../lib/hooks'
 import { sekarang } from '../lib/waktu'
 import { LABEL_OPSI, gabungPilihan, rupiah } from '../lib/format'
+import { formatPoin, formatWaktu, poinJawaban } from '../lib/skor'
 import type { JawabanPeserta, Soal, Tema } from '../lib/types'
 import PinGate from '../components/PinGate'
 import TimerRing from '../components/TimerRing'
@@ -27,7 +29,7 @@ import { useVersiKedaluwarsa } from '../lib/versi'
 import Dashboard, { type DataDashboard } from '../components/Dashboard'
 
 const KUNCI_PIN = 'juragan-terkaya:fasilitator'
-const TABEL_DIPANTAU = ['peserta', 'jawaban', 'transaksi']
+const TABEL_DIPANTAU = ['peserta', 'jawaban']
 
 export default function Fasilitator() {
   const [lolos, setLolos] = useState(() => sessionStorage.getItem(KUNCI_PIN) === 'ok')
@@ -53,7 +55,7 @@ function PanelFasilitator() {
   const [data, setData] = useState<DataDashboard>({
     peserta: [],
     jawaban: [],
-    transaksi: [],
+
     soal: [],
   })
   const [tab, setTab] = useState<'kendali' | 'bank' | 'dashboard'>('kendali')
@@ -100,13 +102,13 @@ function PanelFasilitator() {
   // ── Muat data dashboard, disegarkan otomatis lewat realtime ──
   const muatData = useCallback(async () => {
     try {
-      const [peserta, jawaban, transaksi, semuaSoal] = await Promise.all([
+      const [peserta, jawaban, semuaSoal] = await Promise.all([
         ambilSemuaPeserta(),
         ambilSemuaJawaban(),
-        ambilSemuaTransaksi(),
+
         ambilSemuaSoal(),
       ])
-      setData({ peserta, jawaban, transaksi, soal: semuaSoal })
+      setData({ peserta, jawaban, soal: semuaSoal })
     } catch (e) {
       setGalat(e instanceof Error ? e.message : String(e))
     }
@@ -155,7 +157,11 @@ function PanelFasilitator() {
 
   /**
    * Membuka putaran baru: mengundi soal acak dari tema yang dipilih lalu
-   * menampilkannya ke seluruh peserta. Semua peserta menjawab setiap soal.
+   * menampilkannya ke seluruh peserta.
+   *
+   * Bila seluruh soal aktif sudah keluar, permainan langsung diakhiri —
+   * tidak mengulang dari awal. Kalau fasilitator mencentang 10 soal, memang
+   * selesai setelah soal ke-10.
    */
   const mulaiPutaran = useCallback(
     (putaranBaru: number) =>
@@ -167,12 +173,21 @@ function PanelFasilitator() {
         const daftarSoal = await ambilSoalTema(temaId)
         setSoalTema(daftarSoal)
 
-        const terpilih = pilihSoalAcak(daftarSoal, state?.riwayat_soal ?? [])
+        const riwayat = state?.riwayat_soal ?? []
+        const terpilih = pilihSoalAcak(daftarSoal, riwayat)
+
         if (!terpilih) {
-          throw new Error(
-            'Tema ini belum punya soal. Tambahkan soal lewat menu Bank Soal terlebih dahulu.',
-          )
+          const adaSoalAktif = daftarSoal.some((s) => s.aktif)
+          if (!adaSoalAktif) {
+            throw new Error(
+              'Tema ini belum punya soal aktif. Centang soal di menu Bank Soal terlebih dahulu.',
+            )
+          }
+          // Semua soal sudah dimainkan — tutup permainan.
+          await ubahGameState({ fase: 'selesai', berjalan: false, soal_id: null })
+          return
         }
+
         await ubahGameState({
           berjalan: true,
           fase: 'soal',
@@ -181,20 +196,20 @@ function PanelFasilitator() {
           fase_mulai: new Date(sekarang()).toISOString(),
           reveal: false,
           show_insight: false,
-          riwayat_soal: tambahRiwayat(state?.riwayat_soal ?? [], terpilih.id),
+          riwayat_soal: tambahRiwayat(riwayat, terpilih.id),
         })
       }),
     [temaId, state?.riwayat_soal, jalankan],
   )
 
   /**
-   * Membuka jawaban sekaligus membukukan saldo seluruh peserta putaran ini.
-   * Saldo sengaja baru diterapkan di sini agar peserta tidak bisa menebak
-   * benar/salah dari saldonya yang berubah lebih dulu.
+   * Membuka jawaban seluruh peserta putaran ini. Sebelum dibuka, jawaban tidak
+   * ikut dihitung ke poin mana pun — supaya peserta tidak bisa menebak
+   * benar/salah dari poinnya yang bertambah lebih dulu.
    */
   const revealJawaban = () =>
     jalankan(async () => {
-      if (state) await terapkanSaldoPutaran(state.putaran)
+      if (state) await bukaJawabanPutaran(state.putaran)
       await ubahGameState({ fase: 'reveal', reveal: true })
       await muatData()
     })
@@ -236,6 +251,12 @@ function PanelFasilitator() {
 
   /** Seluruh peserta kini wajib menjawab setiap soal. */
   const idSemuaPeserta = useMemo(() => data.peserta.map((p) => p.id), [data.peserta])
+
+  /** Soal aktif yang belum keluar pada sesi berjalan. */
+  const sisaSoalIni = useMemo(
+    () => sisaSoalAktif(soalTema, state?.riwayat_soal ?? []),
+    [soalTema, state?.riwayat_soal],
+  )
 
   if (!state) {
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Memuat…</div>
@@ -339,7 +360,8 @@ function PanelFasilitator() {
             <PemilihTema
               tema={tema}
               temaId={temaId}
-              jumlahSoal={soalTema.length}
+              jumlahAktif={soalTema.filter((s) => s.aktif).length}
+              sisaAktif={sisaSoalIni}
               terkunci={state.berjalan}
               onPilih={pilihTema}
               onKeBankSoal={() => setTab('bank')}
@@ -400,12 +422,21 @@ function PanelFasilitator() {
                 </Tombol>
               )}
 
-              {state.fase === 'selesai' && (
+              {/* Hanya ditawarkan bila masih ada soal tersisa. Tanpa penjagaan
+                  ini tombolnya jadi jalan buntu: ditekan, tidak terjadi apa-apa. */}
+              {state.fase === 'selesai' && sisaSoalIni > 0 && (
                 <Tombol utama onClick={() => mulaiPutaran(state.putaran + 1)} sibuk={sibuk}>
                   ▶️ Lanjutkan Game
                 </Tombol>
               )}
             </div>
+
+            {state.fase === 'selesai' && sisaSoalIni === 0 && (
+              <p className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm leading-relaxed text-amber-300">
+                🎉 Seluruh soal tema ini sudah dimainkan. Tekan <b>♻️ Reset</b> untuk memulai sesi
+                baru, atau ganti tema setelah reset.
+              </p>
+            )}
 
             <div className="mt-5 text-left">
               <DaftarPesertaBergabung peserta={data.peserta} belumMulai={!state.berjalan} />
@@ -476,14 +507,18 @@ function PanelFasilitator() {
 function PemilihTema({
   tema,
   temaId,
-  jumlahSoal,
+  jumlahAktif,
+  sisaAktif,
   terkunci,
   onPilih,
   onKeBankSoal,
 }: {
   tema: Tema[]
   temaId: number | null
-  jumlahSoal: number
+  /** Soal yang dicentang di tema ini. */
+  jumlahAktif: number
+  /** Soal aktif yang belum keluar pada sesi berjalan. */
+  sisaAktif: number
   terkunci: boolean
   onPilih: (id: number | null) => void
   onKeBankSoal: () => void
@@ -520,11 +555,24 @@ function PemilihTema({
         ))}
       </select>
 
+      {temaId && (
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-slate-800/60 px-2.5 py-1.5">
+          <span className="text-[11px] text-slate-400">Soal dimainkan</span>
+          <span className="text-xs font-semibold tabular-nums text-slate-100">
+            {jumlahAktif - sisaAktif} / {jumlahAktif}
+          </span>
+        </div>
+      )}
+
       <p className="mt-1.5 text-[11px] text-slate-500">
         {terkunci
-          ? 'Tema terkunci selama game berjalan. Akhiri atau reset game untuk menggantinya.'
+          ? sisaAktif === 0
+            ? 'Semua soal sudah dimainkan — game akan berakhir setelah putaran ini.'
+            : `Tersisa ${sisaAktif} soal. Tema terkunci sampai game diakhiri atau direset.`
           : temaId
-            ? `${jumlahSoal} soal siap diundi dari tema ini.`
+            ? jumlahAktif === 0
+              ? 'Tema ini belum punya soal yang dicentang.'
+              : `${jumlahAktif} soal dicentang dan siap dimainkan.`
             : 'Pilih tema dulu sebelum memulai game.'}
       </p>
     </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   ambilJawabanPeserta,
   ambilJawabanSaya,
@@ -7,24 +7,22 @@ import {
   ambilSemuaPeserta,
   ambilSemuaSoal,
   ambilSoalById,
-  ambilTransaksiSaya,
   daftarPeserta,
   simpanJawaban,
-  simpanTransaksi,
 } from '../lib/api'
-import {
-  BONUS_BENAR,
-  DENDA,
-  DURASI_SOAL,
-  EFEK_META,
-  MODAL_AWAL,
-} from '../lib/config'
+import { DURASI_SOAL, EFEK_META, POIN_MAKS, POIN_MIN } from '../lib/config'
 import { sekarang } from '../lib/waktu'
 import { useVersiKedaluwarsa } from '../lib/versi'
-import { hitungBukuBesar } from '../lib/bukuBesar'
+import {
+  formatPoin,
+  formatRataWaktu,
+  formatWaktu,
+  hitungRiwayat,
+  poinJawaban,
+  type RiwayatPeserta,
+} from '../lib/skor'
 import PapanSkorPutaran from '../components/PapanSkorPutaran'
 import BannerVersi from '../components/BannerVersi'
-import BukuBesar from '../components/BukuBesar'
 import {
   bacaIdPeserta,
   simpanIdPeserta,
@@ -32,8 +30,8 @@ import {
   useSisaWaktu,
   type StatusKoneksi,
 } from '../lib/hooks'
-import { LABEL_OPSI, jawabanCocok, rupiah, selisih } from '../lib/format'
-import type { JawabanPeserta, Peserta as TPeserta, Pilihan, Soal, Transaksi } from '../lib/types'
+import { LABEL_OPSI, jawabanCocok } from '../lib/format'
+import type { JawabanPeserta, Peserta as TPeserta, Pilihan, Soal } from '../lib/types'
 import TimerRing from '../components/TimerRing'
 
 export default function Peserta() {
@@ -46,10 +44,9 @@ export default function Peserta() {
 
   const [jawaban, setJawaban] = useState<JawabanPeserta | null>(null)
   const [soal, setSoal] = useState<Soal | null>(null)
-  const [transaksi, setTransaksi] = useState<Transaksi[]>([])
   const [mengirim, setMengirim] = useState(false)
 
-  // Riwayat lengkap milik peserta ini, untuk buku besarnya sendiri.
+  // Riwayat lengkap milik peserta ini, untuk menghitung poin dan daftar jawaban.
   const [jawabanSaya, setJawabanSaya] = useState<JawabanPeserta[]>([])
   const [bankSoal, setBankSoal] = useState<Soal[]>([])
 
@@ -122,21 +119,7 @@ export default function Peserta() {
     }
   }, [state?.soal_id])
 
-  // ── Muat riwayat transaksi ───────────────────────────────────────────
-  const muatTransaksi = useCallback(async () => {
-    if (!peserta) return
-    try {
-      setTransaksi(await ambilTransaksiSaya(peserta.id))
-    } catch {
-      /* diamkan — riwayat bukan data kritis */
-    }
-  }, [peserta?.id])
-
-  useEffect(() => {
-    muatTransaksi()
-  }, [muatTransaksi, putaran])
-
-  // ── Muat riwayat untuk buku besar ────────────────────────────────────
+  // ── Muat riwayat jawaban untuk perhitungan poin ──────────────────────
   const muatRiwayat = useCallback(async () => {
     if (!peserta) return
     try {
@@ -157,10 +140,6 @@ export default function Peserta() {
     muatRiwayat()
   }, [muatRiwayat, putaran, fase === 'reveal'])
 
-  // ── Segarkan saldo begitu fasilitator membukukan hasil putaran ──────
-  useEffect(() => {
-    if (fase === 'reveal' || fase === 'skor' || fase === 'selesai') muatPeserta()
-  }, [fase, muatPeserta])
 
   // ── Muat data papan skor ─────────────────────────────────────────────
   useEffect(() => {
@@ -199,10 +178,6 @@ export default function Peserta() {
             : durasiMs,
         )
 
-        // Hanya bonus dan denda yang menggerakkan saldo. Nominal soal tidak
-        // terlibat, dan kecepatan hanya jadi penentu urutan saat saldo seri.
-        const delta = benar ? BONUS_BENAR : -DENDA
-
         await simpanJawaban({
           peserta_id: peserta.id,
           putaran: state.putaran,
@@ -210,14 +185,14 @@ export default function Peserta() {
           pilihan_ganda: pilihan,
           benar,
           wajib: true,
-          delta_saldo: delta,
+          delta_saldo: 0, // kolom peninggalan versi bersaldo, kini tidak dipakai
           waktu_jawab_ms: pilihan === null ? null : waktuMs,
           diterapkan: false,
         })
 
-        // Saldo TIDAK diubah di sini. Perubahan saldo dibukukan serentak oleh
-        // fasilitator saat reveal, supaya peserta tidak bisa menebak benar/salah
-        // dari saldonya yang berubah lebih dulu.
+        // Poin belum dihitung di sini. Jawaban baru ikut dinilai setelah
+        // fasilitator menekan Reveal, supaya peserta tidak bisa menebak
+        // benar/salah dari poinnya yang bertambah lebih dulu.
         setJawaban(await ambilJawabanSaya(peserta.id, state.putaran))
       } catch (e) {
         setGalat(e instanceof Error ? e.message : String(e))
@@ -256,21 +231,12 @@ export default function Peserta() {
     )
   }
 
-  const sudahCatatPutaranIni = transaksi.some((t) => t.putaran === putaran)
-  // Form catatan baru boleh muncul setelah jawaban dibuka — kemunculannya sendiri
-  // sudah menandakan jawaban peserta benar.
-  const hasilTerbuka = fase === 'reveal' || fase === 'skor' || fase === 'selesai'
-  const perluCatat =
-    hasilTerbuka &&
-    jawaban?.benar === true &&
-    soal !== null &&
-    soal.efek !== 'netral' &&
-    !sudahCatatPutaranIni
+  const riwayat = hitungRiwayat(peserta, jawabanSaya, bankSoal)
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-md px-4 pb-24 pt-4">
       {versiKedaluwarsa && <BannerVersi />}
-      <BadgeStatus peserta={peserta} />
+      <BadgeStatus peserta={peserta} riwayat={riwayat} />
       <BadgeKoneksi status={koneksi} />
 
       {galat && (
@@ -288,7 +254,8 @@ export default function Peserta() {
       {state?.fase === 'selesai' && (
         <div className="space-y-4">
           <KartuInfo emoji="🏁" judul="Game selesai!">
-            Saldo akhirmu <b className="text-amber-400">{rupiah(peserta.saldo)}</b>
+            Poin akhirmu <b className="text-amber-400">{formatPoin(riwayat.poin)}</b> dari{' '}
+            {riwayat.benar} jawaban benar
           </KartuInfo>
           <PapanSkorPutaran
             putaran={putaran}
@@ -331,22 +298,7 @@ export default function Peserta() {
         </div>
       )}
 
-      {perluCatat && soal && (
-        <FormCatatTransaksi
-          soal={soal}
-          putaran={putaran}
-          pesertaId={peserta.id}
-          onTersimpan={muatTransaksi}
-          onGalat={setGalat}
-        />
-      )}
-
-      <BukuBesarSaya
-        peserta={peserta}
-        jawaban={jawabanSaya}
-        transaksi={transaksi}
-        soal={bankSoal}
-      />
+      <RiwayatSaya riwayat={riwayat} />
     </div>
   )
 }
@@ -410,9 +362,9 @@ function FormDaftar({
           <div className="mb-2 text-5xl">💰</div>
           <h1 className="text-xl font-bold text-amber-400">Games Literasi Keuangan</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Kamu akan memulai usaha dengan modal
+            Jawab dengan tepat dan cepat.
             <br />
-            <b className="text-lg text-slate-100">{rupiah(MODAL_AWAL)}</b>
+            Makin cepat jawaban benarmu, makin besar poinnya.
           </p>
         </div>
 
@@ -439,16 +391,20 @@ function FormDaftar({
   )
 }
 
-function BadgeStatus({ peserta }: { peserta: TPeserta }) {
-  const untung = peserta.saldo >= MODAL_AWAL
+function BadgeStatus({ peserta, riwayat }: { peserta: TPeserta; riwayat: RiwayatPeserta }) {
   return (
     <div className="mb-4 flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/80 px-4 py-3">
-      <p className="min-w-0 truncate text-sm font-semibold text-slate-100">{peserta.nama}</p>
-      <div className="shrink-0 text-right">
-        <p className={`text-lg font-bold tabular-nums ${untung ? 'text-green-400' : 'text-red-400'}`}>
-          {rupiah(peserta.saldo)}
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-100">{peserta.nama}</p>
+        <p className="text-[11px] text-slate-400">
+          {riwayat.benar} benar dari {riwayat.baris.length} soal
         </p>
-        <p className="text-[10px] text-slate-500">{selisih(peserta.saldo - MODAL_AWAL)}</p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-lg font-bold tabular-nums text-amber-400">
+          {formatPoin(riwayat.poin)}
+        </p>
+        <p className="text-[10px] uppercase tracking-wide text-slate-500">poin</p>
       </div>
     </div>
   )
@@ -533,7 +489,8 @@ function FaseSoal({
         </p>
         <p className="text-base font-extrabold tracking-wide">🎯 JAWAB SECEPATNYA</p>
         <p className="mt-0.5 text-xs opacity-75">
-          Benar bonus {rupiah(BONUS_BENAR)} · Salah atau telat denda {rupiah(DENDA)}
+          Jawaban benar bernilai {formatPoin(POIN_MIN)}–{formatPoin(POIN_MAKS)} poin — makin cepat,
+          makin besar
         </p>
       </div>
 
@@ -671,128 +628,33 @@ function HasilJawaban({ jawaban, soal }: { jawaban: JawabanPeserta; soal: Soal }
       <p className={`font-bold ${benar ? 'text-green-400' : 'text-red-400'}`}>{judul}</p>
 
       <p
-        className={`mt-1 text-lg font-bold tabular-nums ${
-          benar ? 'text-green-400' : 'text-red-400'
+        className={`mt-1 text-2xl font-bold tabular-nums ${
+          benar ? 'text-green-400' : 'text-slate-500'
         }`}
       >
-        {selisih(jawaban.delta_saldo)}
+        +{formatPoin(poinJawaban(jawaban))}
       </p>
       <p className="text-xs text-slate-400">
-        {benar ? 'Bonus jawaban benar' : 'Denda jawaban salah'}
+        {benar
+          ? `poin — dijawab dalam ${formatWaktu(jawaban.waktu_jawab_ms)}`
+          : 'poin — hanya jawaban benar yang bernilai'}
       </p>
 
-      {soal.efek !== 'netral' && (
-        <p className="mt-2 border-t border-slate-700 pt-2 text-xs text-slate-500">
-          Nilai transaksi soal ini {rupiah(soal.nominal)} — hanya sebagai konteks, tidak
-          mempengaruhi saldo.
+      {benar && jawaban.waktu_jawab_ms !== null && (
+        <p className="mt-2 border-t border-slate-700 pt-2 text-[11px] text-slate-500">
+          Menjawab lebih cepat bisa mencapai {formatPoin(POIN_MAKS)} poin.
         </p>
       )}
     </div>
   )
 }
 
-function FormCatatTransaksi({
-  soal,
-  putaran,
-  pesertaId,
-  onTersimpan,
-  onGalat,
-}: {
-  soal: Soal
-  putaran: number
-  pesertaId: string
-  onTersimpan: () => void
-  onGalat: (s: string) => void
-}) {
-  const [keterangan, setKeterangan] = useState('')
-  const [proses, setProses] = useState(false)
-  const masuk = soal.efek === 'masuk'
-
-  async function kirim(e: FormEvent) {
-    e.preventDefault()
-    if (proses) return
-    setProses(true)
-    try {
-      await simpanTransaksi({
-        peserta_id: pesertaId,
-        putaran,
-        keterangan: keterangan.trim() || soal.teks.slice(0, 60),
-        jumlah: soal.nominal,
-        arah: masuk ? 'masuk' : 'keluar',
-      })
-      onTersimpan()
-    } catch (err) {
-      onGalat(err instanceof Error ? err.message : String(err))
-    } finally {
-      setProses(false)
-    }
-  }
-
-  return (
-    <form
-      onSubmit={kirim}
-      className="animasi-muncul mt-4 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-5"
-    >
-      <h3 className="font-bold text-amber-300">📒 Catat transaksimu</h3>
-      <p className="mt-1 text-xs text-slate-400">
-        Inilah kebiasaan yang melatih juragan sukses — catat setiap transaksi usaha.
-      </p>
-
-      <label className="mt-4 mb-1.5 block text-sm text-slate-300">Keterangan</label>
-      <input
-        value={keterangan}
-        onChange={(e) => setKeterangan(e.target.value)}
-        placeholder={soal.teks.slice(0, 50) + '…'}
-        maxLength={80}
-        className="w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-2.5 text-sm text-slate-100 outline-none focus:border-amber-400"
-      />
-
-      <label className="mt-3 mb-1.5 block text-sm text-slate-300">
-        {masuk ? 'Pemasukan' : 'Pengeluaran'}
-      </label>
-      <input
-        readOnly
-        value={rupiah(soal.nominal)}
-        className={`w-full cursor-not-allowed rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 font-semibold ${
-          masuk ? 'text-green-400' : 'text-red-400'
-        }`}
-      />
-      <p className="mt-1 text-[11px] text-slate-500">
-        Nominal terkunci mengikuti soal agar penilaian tetap adil.
-      </p>
-
-      <button
-        type="submit"
-        disabled={proses}
-        className="mt-4 w-full rounded-xl bg-amber-500 py-3 font-bold text-slate-900 transition hover:bg-amber-400 active:scale-[.98] disabled:opacity-40"
-      >
-        {proses ? 'Menyimpan…' : 'Simpan Catatan'}
-      </button>
-    </form>
-  )
-}
-
 /**
- * Buku besar milik peserta sendiri — isi dan perhitungannya sama persis dengan
- * yang dilihat fasilitator, karena memakai komponen dan fungsi yang sama.
+ * Riwayat jawaban peserta sendiri, berikut poin tiap soalnya.
  * Dibuat lipat agar tidak memanjangkan layar saat sedang menjawab.
  */
-function BukuBesarSaya({
-  peserta,
-  jawaban,
-  transaksi,
-  soal,
-}: {
-  peserta: TPeserta
-  jawaban: JawabanPeserta[]
-  transaksi: Transaksi[]
-  soal: Soal[]
-}) {
+function RiwayatSaya({ riwayat }: { riwayat: RiwayatPeserta }) {
   const [terbuka, setTerbuka] = useState(false)
-  const buku = useMemo(
-    () => hitungBukuBesar(peserta, jawaban, transaksi, soal),
-    [peserta, jawaban, transaksi, soal],
-  )
 
   return (
     <div className="mt-6 overflow-hidden rounded-2xl border border-slate-700 bg-slate-800/40">
@@ -802,30 +664,59 @@ function BukuBesarSaya({
       >
         <span className="text-slate-500">{terbuka ? '▾' : '▸'}</span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-slate-100">📒 Buku besarku</span>
+          <span className="block text-sm font-semibold text-slate-100">📋 Riwayat jawabanku</span>
           <span className="text-[11px] text-slate-400">
-            {buku.baris.length} transaksi · {buku.jumlahBenar} benar · {buku.jumlahSalah} salah
+            {riwayat.benar} benar · {riwayat.salah} salah
+            {riwayat.rataWaktuMs !== null && ` · ${formatRataWaktu(riwayat.rataWaktuMs)}`}
           </span>
         </span>
         <span className="shrink-0 text-right">
-          <span
-            className={`block text-sm font-bold tabular-nums ${
-              peserta.saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
-            }`}
-          >
-            {rupiah(peserta.saldo)}
+          <span className="block text-sm font-bold tabular-nums text-amber-400">
+            {formatPoin(riwayat.poin)}
           </span>
-          <span className="block text-[10px] tabular-nums text-slate-400">
-            {selisih(peserta.saldo - MODAL_AWAL)}
-          </span>
+          <span className="block text-[10px] uppercase tracking-wide text-slate-500">poin</span>
         </span>
       </button>
 
       {terbuka && (
         <div className="border-t border-slate-700 px-4 py-3">
-          <BukuBesar buku={buku} milikSaya />
+          {riwayat.baris.length === 0 ? (
+            <p className="py-3 text-center text-xs text-slate-500">
+              Belum ada jawaban yang dinilai. Poin muncul setelah fasilitator membuka jawaban.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {riwayat.baris.map((r) => (
+                <li key={r.jawaban.id} className="text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-xs text-slate-400">
+                      Putaran {r.jawaban.putaran} ·{' '}
+                      {r.jawaban.benar ? (
+                        <span className="text-green-400">benar</span>
+                      ) : (
+                        <span className="text-red-400">
+                          {r.jawaban.pilihan_ganda === null ? 'tidak menjawab' : 'salah'}
+                        </span>
+                      )}
+                      {r.jawaban.waktu_jawab_ms !== null &&
+                        ` · ${formatWaktu(r.jawaban.waktu_jawab_ms)}`}
+                    </span>
+                    <span
+                      className={`shrink-0 tabular-nums ${
+                        r.poin > 0 ? 'text-amber-400' : 'text-slate-600'
+                      }`}
+                    >
+                      +{formatPoin(r.poin)}
+                    </span>
+                  </div>
+                  <p className="truncate text-slate-300">{r.soal?.teks ?? '—'}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
   )
 }
+

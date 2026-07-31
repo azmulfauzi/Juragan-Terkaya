@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { MODAL_AWAL } from '../lib/config'
-import { rupiah } from '../lib/format'
+import { POIN_MAKS } from '../lib/config'
+import { formatPoin } from '../lib/skor'
 
 export default function Home() {
   return (
@@ -9,8 +9,8 @@ export default function Home() {
         <div className="mb-3 text-6xl">💰</div>
         <h1 className="text-3xl font-extrabold text-amber-400">Games Literasi Keuangan</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Kuis interaktif untuk UMKM — mulai dengan modal {rupiah(MODAL_AWAL)}, jawab dengan tepat
-          dan cepat, raih saldo tertinggi.
+          Kuis interaktif untuk UMKM — jawab dengan tepat dan cepat. Tiap jawaban benar bernilai
+          hingga {formatPoin(POIN_MAKS)} poin, makin cepat makin besar.
         </p>
 
         <div className="mt-8 space-y-3">

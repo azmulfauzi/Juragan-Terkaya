@@ -85,43 +85,48 @@ Alur satu putaran:
    semua bermain di setiap soal
 3. Fasilitator memantau progress: siapa sudah menjawab dan berapa detik.
    Benar/salah masih tersembunyi — aman kalau layar di-share
-4. Fasilitator klik **Reveal Jawaban** → saat inilah saldo seluruh peserta
-   dibukukan serentak, dan peserta baru tahu benar/salah
+4. Fasilitator klik **Reveal Jawaban** → saat inilah poin seluruh peserta
+   dihitung serentak, dan peserta baru tahu benar/salah
 5. Fasilitator klik **Tampilkan Insight** untuk membahas pelajarannya
-6. Peserta yang menjawab benar mengisi **form catatan transaksi** sebagai latihan
-   mencatat (tidak mempengaruhi saldo)
-7. Fasilitator klik **Lihat Papan Skor** → muncul **podium tercepat** putaran itu
-   dan **peringkat kumulatif**, di layar fasilitator maupun HP peserta
-8. Klik **Soal Berikutnya**, atau **Akhiri Game** untuk menutup sesi
+6. Fasilitator klik **Lihat Papan Skor** → muncul **podium tercepat** putaran itu
+   dan **peringkat poin kumulatif**, di layar fasilitator maupun HP peserta
+7. Klik **Soal Berikutnya**, atau **Akhiri Game** untuk menutup sesi lebih awal
 
-Jumlah putaran tidak dibatasi — fasilitator yang menentukan kapan berhenti.
+> **Penting:** menekan **Reveal Jawaban** tidak boleh dilewat. Poin peserta baru
+> dihitung pada langkah itu — kalau dilewati, papan skor tidak bergerak.
 
-> **Penting:** menekan **Reveal Jawaban** tidak boleh dilewat. Saldo peserta baru
-> dibukukan pada langkah itu — kalau dilewati, papan skor tidak bergerak.
+### Perhitungan poin
 
-### Perhitungan saldo
+Jawaban **benar** bernilai **500–1000 poin** tergantung kecepatan; menjawab di
+detik pertama mendekati 1000, di detik terakhir tepat 500. Jawaban **salah atau
+tidak menjawab** bernilai **0**.
 
-```
-delta = benar ? +Rp1.000.000 : −Rp500.000
-```
+Poin dijumlahkan dari seluruh putaran. Batas bawah sengaja tidak nol supaya
+peserta yang berpikir lama tapi tetap benar masih dihargai — yang dibedakan
+kecepatannya, bukan diabaikan.
 
-| Hasil jawaban | Perubahan saldo |
-|---|---|
-| Benar | `+Rp1.000.000` |
-| Salah atau tidak menjawab | `−Rp500.000` |
+> **Konsekuensi yang perlu disadari:** peserta cepat dengan 8 jawaban benar bisa
+> mengalahkan peserta lambat dengan 9 jawaban benar. Itu memang disengaja — game
+> ini menilai ketepatan dan kecepatan sekaligus.
 
-**Nominal dan jenis efek soal tidak mempengaruhi saldo.** Keduanya tetap ada di
-bank soal sebagai bahan pembelajaran — ditampilkan setelah reveal dan mengisi form
-catatan transaksi — tapi tidak menggerakkan angka. Akibatnya saldo menjadi
-cerminan langsung dari jumlah jawaban benar, sehingga peringkat mudah dijelaskan
-ke peserta.
+Nominal dan jenis efek soal **tidak mempengaruhi poin**. Keduanya tetap ada di
+bank soal sebagai bahan pembelajaran dan hanya ditampilkan setelah reveal.
 
 ### Penentuan pemenang
 
 - **Podium putaran** — di antara peserta yang sama-sama menjawab **benar**, yang
   **tercepat** menang.
-- **Peringkat akhir** — saldo tertinggi. Bila saldo **seri**, yang **rata-rata waktu
-  menjawabnya lebih cepat** berada di atas. Kecepatan tidak pernah menambah uang.
+- **Peringkat akhir** — poin tertinggi. Bila poin seri: jumlah benar terbanyak,
+  lalu rata-rata waktu tercepat.
+
+### Kapan permainan berakhir
+
+Permainan berhenti **setelah seluruh soal yang dicentang habis dimainkan** — soal
+tidak diulang dari awal. Kalau kamu mencentang 10 soal, sesi memang selesai
+setelah soal ke-10, dan papan skor final langsung tampil.
+
+Panel Kendali menampilkan progres **"Soal dimainkan 4 / 10"** supaya kamu tahu
+tinggal berapa.
 
 ---
 
@@ -131,11 +136,9 @@ Semua ada di [`src/lib/config.ts`](src/lib/config.ts):
 
 | Konstanta | Default | Arti |
 |---|---|---|
-| `MODAL_AWAL` | `10.000.000` | Saldo awal tiap peserta |
-| `DENDA` | `500.000` | Potongan untuk jawaban salah / telat |
-| `BONUS_BENAR` | `1.000.000` | Bonus untuk jawaban benar |
 | `DURASI_SOAL` | `30` detik | Waktu menjawab soal |
-| `RIWAYAT_SOAL_MAX` | `20` | Berapa soal terakhir dihindari agar tidak berulang |
+| `POIN_MAKS` | `1000` | Poin jawaban benar tercepat |
+| `POIN_MIN` | `500` | Poin jawaban benar paling lambat |
 
 PIN fasilitator diatur lewat `VITE_FASILITATOR_PIN` di `.env`.
 
@@ -173,7 +176,7 @@ tersimpan supaya kelompok berikutnya bisa langsung mulai.
 ## Reset antar sesi
 
 Tombol **♻️ Reset** di dashboard fasilitator menghapus seluruh peserta, jawaban,
-catatan transaksi, dan riwayat putaran — siap untuk kelompok presentasi berikutnya.
+dan riwayat soal yang sudah keluar — siap untuk kelompok presentasi berikutnya.
 Bank soal **tidak** ikut terhapus.
 
 ---

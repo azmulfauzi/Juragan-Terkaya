@@ -1,7 +1,6 @@
 import { supabase } from './supabase'
 import { SOAL_DEFAULT } from '../data/soal'
-import { RIWAYAT_SOAL_MAX } from './config'
-import type { GameState, JawabanPeserta, Peserta, Soal, Tema, Transaksi } from './types'
+import type { GameState, JawabanPeserta, Peserta, Soal, Tema } from './types'
 
 /** Membungkus error Supabase jadi pesan yang bisa dibaca manusia. */
 function cek<T>(data: T | null, error: { message: string } | null, konteks: string): T {
@@ -23,13 +22,19 @@ export async function ubahGameState(patch: Partial<GameState>): Promise<void> {
 }
 
 /**
- * Membukukan seluruh perubahan saldo satu putaran sekaligus.
- * Dipanggil saat fasilitator menekan "Reveal Jawaban" — sampai saat itu saldo
- * peserta sengaja dibiarkan tetap agar tidak membocorkan benar/salah.
+ * Menandai seluruh jawaban satu putaran sebagai sudah dibuka.
+ *
+ * Dipanggil saat fasilitator menekan "Reveal Jawaban". Sebelum ditandai,
+ * jawaban tidak ikut dihitung ke poin mana pun — tanpa itu peserta bisa
+ * menebak benar/salah dari poinnya yang bertambah lebih dulu.
+ *
+ * Nama fungsi di database masih `terapkan_saldo_putaran` peninggalan versi
+ * yang memakai saldo. Efek sampingnya (menambah kolom saldo yang kini
+ * menganggur) tidak mengganggu, jadi dibiarkan demi menghindari migrasi.
  */
-export async function terapkanSaldoPutaran(putaran: number): Promise<void> {
+export async function bukaJawabanPutaran(putaran: number): Promise<void> {
   const { error } = await supabase.rpc('terapkan_saldo_putaran', { p_putaran: putaran })
-  if (error) throw new Error(`Gagal membukukan saldo putaran: ${error.message}`)
+  if (error) throw new Error(`Gagal membuka jawaban putaran: ${error.message}`)
 }
 
 export async function resetGame(): Promise<void> {
@@ -105,34 +110,6 @@ export async function ambilJawabanSaya(
     .maybeSingle()
   if (error) throw new Error(`Gagal membaca jawaban: ${error.message}`)
   return data
-}
-
-// ────────────────────────────── TRANSAKSI ──────────────────────────────
-
-export async function simpanTransaksi(
-  transaksi: Omit<Transaksi, 'id' | 'created_at'>,
-): Promise<void> {
-  const { error } = await supabase.from('transaksi').insert(transaksi)
-  if (error) throw new Error(`Gagal menyimpan catatan transaksi: ${error.message}`)
-}
-
-export async function ambilSemuaTransaksi(): Promise<Transaksi[]> {
-  const { data, error } = await supabase
-    .from('transaksi')
-    .select('*')
-    .order('putaran', { ascending: false })
-    .order('created_at', { ascending: false })
-  return cek(data, error, 'Gagal membaca catatan transaksi')
-}
-
-export async function ambilTransaksiSaya(pesertaId: string): Promise<Transaksi[]> {
-  const { data, error } = await supabase
-    .from('transaksi')
-    .select('*')
-    .eq('peserta_id', pesertaId)
-    .order('putaran', { ascending: false })
-    .order('created_at', { ascending: false })
-  return cek(data, error, 'Gagal membaca catatan transaksi')
 }
 
 // ──────────────────────────────── TEMA ────────────────────────────────
@@ -235,19 +212,30 @@ export async function hapusSoal(id: number): Promise<void> {
 // ──────────────────────── PEMILIHAN SOAL ACAK ────────────────────────
 
 /**
- * Memilih 1 soal acak dari soal yang AKTIF, menghindari soal yang baru dipakai.
- * Jika semua soal aktif sudah terpakai, riwayat diabaikan (fallback).
+ * Memilih 1 soal acak dari soal yang AKTIF dan belum dipakai pada sesi ini.
+ *
+ * Mengembalikan null bila seluruh soal aktif sudah habis dimainkan — game
+ * berhenti di situ, tidak mengulang dari awal. Kalau fasilitator mencentang
+ * 10 soal, permainan memang selesai setelah soal ke-10.
  */
 export function pilihSoalAcak(semuaSoal: Soal[], riwayat: number[]): Soal | null {
-  const aktif = semuaSoal.filter((s) => s.aktif)
-  if (aktif.length === 0) return null
-
-  const belumDipakai = aktif.filter((s) => !riwayat.includes(s.id))
-  const kandidat = belumDipakai.length > 0 ? belumDipakai : aktif
-  return kandidat[Math.floor(Math.random() * kandidat.length)]
+  const belumDipakai = semuaSoal.filter((s) => s.aktif && !riwayat.includes(s.id))
+  if (belumDipakai.length === 0) return null
+  return belumDipakai[Math.floor(Math.random() * belumDipakai.length)]
 }
 
-/** Menambahkan id soal ke riwayat, memotong agar tidak melebihi batas. */
+/** Berapa soal aktif yang masih tersisa pada sesi berjalan. */
+export function sisaSoalAktif(semuaSoal: Soal[], riwayat: number[]): number {
+  return semuaSoal.filter((s) => s.aktif && !riwayat.includes(s.id)).length
+}
+
+/**
+ * Menambahkan id soal ke riwayat sesi.
+ *
+ * Riwayat sengaja TIDAK dipotong: ia menjadi daftar soal yang sudah keluar,
+ * dan dari situlah permainan tahu kapan harus berhenti. Riwayat dikosongkan
+ * saat mengganti tema atau melakukan Reset.
+ */
 export function tambahRiwayat(riwayat: number[], soalId: number): number[] {
-  return [...riwayat.filter((id) => id !== soalId), soalId].slice(-RIWAYAT_SOAL_MAX)
+  return riwayat.includes(soalId) ? riwayat : [...riwayat, soalId]
 }

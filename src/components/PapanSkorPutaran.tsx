@@ -1,16 +1,19 @@
 import { useMemo } from 'react'
-import { MODAL_AWAL } from '../lib/config'
-import { rupiah, selisih } from '../lib/format'
-import { formatRataWaktu, hitungPeringkat } from '../lib/peringkat'
+import {
+  formatPoin,
+  formatRataWaktu,
+  formatWaktu,
+  hitungPeringkat,
+  poinJawaban,
+} from '../lib/skor'
 import type { JawabanPeserta, Peserta } from '../lib/types'
 
 interface Props {
   putaran: number
   /** Jawaban pada putaran ini saja — dipakai untuk podium tercepat. */
   jawaban: JawabanPeserta[]
-  /** Seluruh jawaban sepanjang game — dipakai sebagai penentu seri peringkat. */
+  /** Seluruh jawaban sepanjang game — dipakai menghitung peringkat kumulatif. */
   semuaJawaban: JawabanPeserta[]
-  /** Seluruh peserta beserta saldo terkini. */
   peserta: Peserta[]
   /** Baris peserta ini akan disorot (dipakai di halaman peserta). */
   sorotPesertaId?: string
@@ -22,14 +25,9 @@ interface Props {
 
 const MEDALI = ['🥇', '🥈', '🥉']
 
-function detik(ms: number | null): string {
-  if (ms === null) return '—'
-  return `${(ms / 1000).toFixed(1)} dtk`
-}
-
 /**
- * Papan pemenang satu putaran (jawaban benar tercepat, ala Kahoot) sekaligus
- * peringkat kumulatif seluruh peserta.
+ * Papan pemenang satu putaran (jawaban benar tercepat) sekaligus peringkat
+ * kumulatif seluruh peserta berdasarkan poin.
  */
 export default function PapanSkorPutaran({
   putaran,
@@ -42,7 +40,7 @@ export default function PapanSkorPutaran({
 }: Props) {
   const nama = useMemo(() => new Map(peserta.map((p) => [p.id, p.nama])), [peserta])
 
-  /** Jawaban benar, diurutkan dari yang paling cepat. */
+  /** Jawaban benar putaran ini, diurutkan dari yang paling cepat. */
   const tercepat = useMemo(
     () =>
       jawaban
@@ -56,7 +54,7 @@ export default function PapanSkorPutaran({
     () => hitungPeringkat(peserta, semuaJawaban),
     [peserta, semuaJawaban],
   )
-  // Tiga besar ditonjolkan sebagai podium, sisanya jadi daftar biasa.
+
   const tigaBesar = peringkat.slice(0, 3)
   const sisanya = peringkat.slice(3)
   const ditampilkan = maksBaris ? sisanya.slice(0, Math.max(0, maksBaris - 3)) : sisanya
@@ -88,9 +86,7 @@ export default function PapanSkorPutaran({
                 <li
                   key={j.id}
                   className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
-                    saya
-                      ? 'border-amber-400 bg-amber-500/20'
-                      : 'border-slate-700 bg-slate-900/60'
+                    saya ? 'border-amber-400 bg-amber-500/20' : 'border-slate-700 bg-slate-900/60'
                   }`}
                 >
                   <span className="text-2xl">{MEDALI[i]}</span>
@@ -100,10 +96,10 @@ export default function PapanSkorPutaran({
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block font-bold tabular-nums text-amber-400">
-                      {detik(j.waktu_jawab_ms)}
+                      +{formatPoin(poinJawaban(j))}
                     </span>
-                    <span className="block text-[11px] tabular-nums text-green-400">
-                      {selisih(j.delta_saldo)}
+                    <span className="block text-[11px] tabular-nums text-slate-400">
+                      {formatWaktu(j.waktu_jawab_ms)}
                     </span>
                   </span>
                 </li>
@@ -113,9 +109,9 @@ export default function PapanSkorPutaran({
         )}
       </div>
 
-      {/* Peringkat kumulatif — tiga besar ditonjolkan */}
+      {/* Peringkat kumulatif */}
       <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
-        <h3 className="mb-4 font-bold text-slate-100">🏆 Top 3 Juragan</h3>
+        <h3 className="mb-4 font-bold text-slate-100">🏆 Peringkat Poin</h3>
 
         {peringkat.length === 0 ? (
           <p className="text-center text-sm text-slate-400">Belum ada peserta.</p>
@@ -123,14 +119,32 @@ export default function PapanSkorPutaran({
           <>
             <div className="grid grid-cols-3 gap-2">
               {tigaBesar.map((p, i) => (
-                <KartuPodium
+                <div
                   key={p.id}
-                  posisi={i}
-                  nama={p.nama}
-                  saldo={p.saldo}
-                  rataWaktuMs={p.rataWaktuMs}
-                  saya={p.id === sorotPesertaId}
-                />
+                  className={`flex flex-col items-center rounded-xl border p-3 text-center ${
+                    i === 0
+                      ? 'border-amber-400 bg-gradient-to-b from-amber-500/25 to-transparent'
+                      : 'border-slate-700 bg-slate-900/60'
+                  } ${p.id === sorotPesertaId ? 'ring-2 ring-amber-400/70' : ''}`}
+                >
+                  <span className={i === 0 ? 'text-3xl' : 'text-2xl'}>{MEDALI[i]}</span>
+                  <span className="mt-1 w-full truncate text-sm font-bold text-slate-100">
+                    {p.nama}
+                  </span>
+                  {p.id === sorotPesertaId && (
+                    <span className="text-[10px] text-amber-300">(kamu)</span>
+                  )}
+                  <span
+                    className={`mt-1 w-full truncate font-bold tabular-nums ${
+                      i === 0 ? 'text-base text-amber-400' : 'text-sm text-slate-200'
+                    }`}
+                  >
+                    {formatPoin(p.poin)}
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    {p.benar} benar · {formatRataWaktu(p.rataWaktuMs)}
+                  </span>
+                </div>
               ))}
             </div>
 
@@ -145,7 +159,8 @@ export default function PapanSkorPutaran({
                       key={p.id}
                       posisi={i + 3}
                       nama={p.nama}
-                      saldo={p.saldo}
+                      poin={p.poin}
+                      benar={p.benar}
                       rataWaktuMs={p.rataWaktuMs}
                       saya={p.id === sorotPesertaId}
                     />
@@ -157,7 +172,8 @@ export default function PapanSkorPutaran({
                       <BarisPeringkat
                         posisi={posisiSaya}
                         nama={peringkat[posisiSaya].nama}
-                        saldo={peringkat[posisiSaya].saldo}
+                        poin={peringkat[posisiSaya].poin}
+                        benar={peringkat[posisiSaya].benar}
                         rataWaktuMs={peringkat[posisiSaya].rataWaktuMs}
                         saya
                       />
@@ -173,63 +189,18 @@ export default function PapanSkorPutaran({
   )
 }
 
-/** Kartu podium untuk tiga peringkat teratas. */
-function KartuPodium({
-  posisi,
-  nama,
-  saldo,
-  rataWaktuMs,
-  saya,
-}: {
-  posisi: number
-  nama: string
-  saldo: number
-  rataWaktuMs: number | null
-  saya?: boolean
-}) {
-  const juara = posisi === 0
-  return (
-    <div
-      className={`flex flex-col items-center rounded-xl border p-3 text-center ${
-        juara
-          ? 'border-amber-400 bg-gradient-to-b from-amber-500/25 to-transparent'
-          : 'border-slate-700 bg-slate-900/60'
-      } ${saya ? 'ring-2 ring-amber-400/70' : ''}`}
-    >
-      <span className={juara ? 'text-3xl' : 'text-2xl'}>{MEDALI[posisi]}</span>
-      <span className="mt-1 w-full truncate text-sm font-bold text-slate-100" title={nama}>
-        {nama}
-      </span>
-      {saya && <span className="text-[10px] text-amber-300">(kamu)</span>}
-      <span
-        className={`mt-1 w-full truncate font-bold tabular-nums ${
-          juara ? 'text-base text-amber-400' : 'text-sm text-slate-200'
-        }`}
-      >
-        {rupiah(saldo)}
-      </span>
-      <span
-        className={`text-[10px] tabular-nums ${
-          saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
-        }`}
-      >
-        {selisih(saldo - MODAL_AWAL)}
-      </span>
-      <span className="text-[10px] text-slate-500">{formatRataWaktu(rataWaktuMs)}</span>
-    </div>
-  )
-}
-
 function BarisPeringkat({
   posisi,
   nama,
-  saldo,
+  poin,
+  benar,
   rataWaktuMs,
   saya,
 }: {
   posisi: number
   nama: string
-  saldo: number
+  poin: number
+  benar: number
   rataWaktuMs: number | null
   saya?: boolean
 }) {
@@ -239,32 +210,18 @@ function BarisPeringkat({
         saya ? 'border-amber-400/60 bg-amber-500/10' : 'border-slate-700 bg-slate-900/60'
       }`}
     >
-      <span className="w-7 shrink-0 text-center text-sm">
-        {posisi < 3 ? MEDALI[posisi] : <span className="text-slate-500">{posisi + 1}</span>}
-      </span>
+      <span className="w-7 shrink-0 text-center text-sm text-slate-500">{posisi + 1}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm text-slate-100">
           {nama}
           {saya && <span className="ml-1.5 text-xs text-amber-300">(kamu)</span>}
         </span>
-        <span
-          className="block text-[10px] text-slate-500"
-          title="Rata-rata waktu menjawab — penentu urutan bila saldo seri"
-        >
-          {formatRataWaktu(rataWaktuMs)}
+        <span className="block text-[10px] text-slate-500">
+          {benar} benar · {formatRataWaktu(rataWaktuMs)}
         </span>
       </span>
-      <span className="shrink-0 text-right">
-        <span className="block text-sm font-semibold tabular-nums text-slate-100">
-          {rupiah(saldo)}
-        </span>
-        <span
-          className={`block text-[11px] tabular-nums ${
-            saldo >= MODAL_AWAL ? 'text-green-400' : 'text-red-400'
-          }`}
-        >
-          {selisih(saldo - MODAL_AWAL)}
-        </span>
+      <span className="shrink-0 text-sm font-bold tabular-nums text-amber-400">
+        {formatPoin(poin)}
       </span>
     </li>
   )
